@@ -1,7 +1,6 @@
 .venv/
 venv/
-data/
-!data/
+data/*
 !data/.gitkeep
 mlruns/
 __pycache__/
