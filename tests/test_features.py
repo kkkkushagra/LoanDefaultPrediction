@@ -86,3 +86,19 @@ def test_rare_flag_keeps_positive_values():
     pipeline = FeaturePipeline(bureau_path=None).fit(frame.iloc[:30], target.iloc[:30])
     transformed = pipeline.transform(frame.iloc[30:])
     assert len(transformed) == 10
+
+
+def test_external_aggregate_join_is_train_only(tmp_path):
+    frame = feature_frame().iloc[:30].copy()
+    external = pd.DataFrame({
+        "SK_ID_CURR": range(30),
+        "EXTERNAL_TOTAL": np.linspace(1, 30, 30),
+    }).assign(SK_ID_CURR=lambda value: value["SK_ID_CURR"])
+    path = tmp_path / "external.parquet"
+    external.to_parquet(path, index=False)
+    pipeline = FeaturePipeline(
+        bureau_path=None,
+        external_paths={"external": path},
+    ).fit(frame, pd.Series([0, 1] * 15))
+    transformed = pipeline.transform(frame)
+    assert transformed.shape[0] == len(frame)

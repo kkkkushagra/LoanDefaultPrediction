@@ -39,10 +39,18 @@ def main(
         bureau.columns = [f"BUREAU_{column}_{stat}" for column, stat in bureau.columns]
         bureau.reset_index().to_parquet(bureau_agg, index=False)
 
+    from scripts.aggregate_external_data import main as aggregate_external
+    aggregate_external("data", output)
+
     feature_source = features.copy()
     feature_source["SK_ID_CURR"] = source["SK_ID_CURR"].reindex(feature_source.index)
     feature_pipeline = FeaturePipeline(
-        bureau_path=bureau_agg if bureau_agg.exists() else None
+        bureau_path=bureau_agg if bureau_agg.exists() else None,
+        external_paths={
+            "bureau": bureau_agg,
+            "previous": output / "previous_application_agg.parquet",
+            "installments": output / "installments_payments_agg.parquet",
+        },
     ).fit(feature_source.loc[train_x.index], train_y.loc[train_x.index])
     feature_train = feature_pipeline.transform(feature_source.loc[train_x.index])
     feature_test = feature_pipeline.transform(feature_source.loc[test_x.index])

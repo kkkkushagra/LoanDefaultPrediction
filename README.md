@@ -193,6 +193,10 @@ MLflow and documented in [model_comparison.md](./docs/model_comparison.md). The 
 AUC target of 0.78 is not yet met; the CV-selected tuned XGBoost test AUC is 0.758018
 and the KS target of 0.35 is met at 0.386603.
 
+Task 3b external-table support is available through
+`python scripts/download_external_data.py` (requires Kaggle credentials) followed by
+`python scripts/aggregate_external_data.py`.
+
 ## Team
 
 - Team ID: 36

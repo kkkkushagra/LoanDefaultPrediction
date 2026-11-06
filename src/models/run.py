@@ -31,6 +31,26 @@ def evaluate(y_true, probability, threshold=None):
     return result
 
 
+def metrics_at_recall(y_true, probability, recall_target=0.70):
+    metrics = metrics_at_threshold(y_true, probability)
+    thresholds = np.linspace(float(np.min(probability)), float(np.max(probability)), 1001)
+    achievable = []
+    for threshold in thresholds:
+        prediction = (probability >= threshold).astype(int)
+        tp = int(((prediction == 1) & (np.asarray(y_true) == 1)).sum())
+        fn = int(((prediction == 0) & (np.asarray(y_true) == 1)).sum())
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        fp = int(((prediction == 1) & (np.asarray(y_true) == 0)).sum())
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        achievable.append((abs(recall - recall_target), threshold, recall, precision))
+    _, threshold, recall, precision = min(achievable)
+    return {
+        "recall_70_threshold": threshold,
+        "recall_at_70_threshold": recall,
+        "precision_at_70_threshold": precision,
+    }
+
+
 def main(
     train_path="data/processed/train.parquet",
     test_path="data/processed/test.parquet",
@@ -42,7 +62,7 @@ def main(
     scale_pos_weight = (len(train_y) - int(train_y.sum())) / int(train_y.sum())
     models = model_factories(scale_pos_weight)
     results = {}
-    mlflow.set_tracking_uri("file:./mlruns")
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("loan-default-model-v1")
 
     tuned = {}
@@ -59,6 +79,10 @@ def main(
             threshold = metrics_at_threshold(train_y, oof_probability)["threshold"]
             results[name] = evaluate(test_y, probability, threshold)
             results[name]["cv_auc_roc"] = cv_auc
+            recall_metrics = metrics_at_recall(train_y, oof_probability)
+            results[name].update(recall_metrics)
+            recall_metrics = metrics_at_recall(train_y, oof_probability)
+            results[name].update(recall_metrics)
             for metric, value in results[name].items():
                 mlflow.log_metric(f"test_{metric}", float(value))
             mlflow.sklearn.log_model(model, name=name)

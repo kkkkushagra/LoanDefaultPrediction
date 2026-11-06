@@ -117,3 +117,51 @@ def test_binary_and_flag_columns_are_not_clipped():
 def test_audit_join_is_preserved_on_application_id(application_frame):
     audit = extract_audit_frame(application_frame.assign(SK_ID_CURR=range(20)))
     assert audit["SK_ID_CURR"].tolist() == application_frame.index.tolist()
+
+
+def test_external_aggregates(tmp_path):
+    from scripts.aggregate_external_data import (
+        bureau_aggregates,
+        installment_aggregates,
+        previous_application_aggregates,
+    )
+
+    bureau = pd.DataFrame({"SK_ID_CURR": [1, 1], "AMT_CREDIT_SUM": [100.0, 200.0]})
+    previous = pd.DataFrame({
+        "SK_ID_CURR": [1, 1],
+        "AMT_APPLICATION": [100.0, 200.0],
+        "NAME_CONTRACT_STATUS": ["Approved", "Refused"],
+    })
+    installments = pd.DataFrame({
+        "SK_ID_CURR": [1, 1],
+        "AMT_PAYMENT": [100.0, 100.0],
+        "DAYS_INSTALMENT": [10, 20],
+        "DAYS_ENTRY_PAYMENT": [11, 19],
+    })
+
+    assert "BUREAU_AMT_CREDIT_SUM_MEAN_AGG" in bureau_aggregates(bureau).columns
+    assert previous_application_aggregates(previous)["PREV_APPROVED_SHARE"].iloc[0] == 0.5
+    assert installment_aggregates(installments)["INSTALL_LATE_PAYMENT_RATE"].iloc[0] == 0.5
+
+
+def test_data_run_smoke(tmp_path, monkeypatch):
+    from src.data.run import main
+
+    frame = pd.DataFrame({
+        "SK_ID_CURR": range(20),
+        "TARGET": [0, 1] * 10,
+        "AMT_INCOME_TOTAL": [1000.0] * 20,
+        "AMT_CREDIT": [2000.0] * 20,
+        "AMT_ANNUITY": [500.0] * 20,
+        "AMT_GOODS_PRICE": [1900.0] * 20,
+        "DAYS_EMPLOYED": [-100] * 20,
+        "CODE_GENDER": ["F", "M"] * 10,
+        "NAME_CONTRACT_TYPE": ["Cash"] * 20,
+    })
+    source_dir = tmp_path / "data"
+    source_dir.mkdir()
+    frame.to_csv(source_dir / "application_train.csv", index=False)
+    monkeypatch.chdir(tmp_path)
+    main("data/application_train.csv", "data/processed")
+    assert (source_dir / "processed" / "train.parquet").exists()
+    assert (source_dir / "processed" / "test.parquet").exists()

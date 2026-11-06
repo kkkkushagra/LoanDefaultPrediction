@@ -146,6 +146,7 @@ def model_factories(scale_pos_weight):
 def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
+    trial_iterations = {}
 
     def objective(trial):
         model = xgb.XGBClassifier(
@@ -164,11 +165,14 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
             random_state=RANDOM_STATE,
         )
         scores = []
+        iterations = []
         for fit_index, valid_index in cv.split(train_x, train_y):
             fit_x, valid_x = train_x.iloc[fit_index], train_x.iloc[valid_index]
             fit_y, valid_y = train_y.iloc[fit_index], train_y.iloc[valid_index]
             model.fit(fit_x, fit_y, eval_set=[(valid_x, valid_y)], verbose=False)
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
+            iterations.append(int(model.best_iteration or model.n_estimators))
+        trial_iterations[len(trial_iterations)] = int(np.median(iterations))
         return float(np.mean(scores))
 
     study = optuna.create_study(
@@ -177,13 +181,19 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
     )
     study.optimize(objective, n_trials=trials, show_progress_bar=False)
     params = study.best_params.copy()
-    params.update(eval_metric="aucpr", n_jobs=-1, random_state=RANDOM_STATE)
+    params.update(
+        n_estimators=max(1, trial_iterations[study.best_trial.number]),
+        eval_metric="aucpr",
+        n_jobs=-1,
+        random_state=RANDOM_STATE,
+    )
     return xgb.XGBClassifier(**params), study.best_value
 
 
 def tune_lightgbm(train_x, train_y, trials, cv):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
+    trial_iterations = {}
 
     def objective(trial):
         model = lgb.LGBMClassifier(
@@ -202,6 +212,7 @@ def tune_lightgbm(train_x, train_y, trials, cv):
             verbosity=-1,
         )
         scores = []
+        iterations = []
         for fit_index, valid_index in cv.split(train_x, train_y):
             fit_x, valid_x = train_x.iloc[fit_index], train_x.iloc[valid_index]
             fit_y, valid_y = train_y.iloc[fit_index], train_y.iloc[valid_index]
@@ -211,6 +222,8 @@ def tune_lightgbm(train_x, train_y, trials, cv):
                 callbacks=[lgb.early_stopping(50, verbose=False)],
             )
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
+            iterations.append(int(model.best_iteration_))
+        trial_iterations[len(trial_iterations)] = int(np.median(iterations))
         return float(np.mean(scores))
 
     study = optuna.create_study(
@@ -219,5 +232,10 @@ def tune_lightgbm(train_x, train_y, trials, cv):
     )
     study.optimize(objective, n_trials=trials, show_progress_bar=False)
     params = study.best_params.copy()
-    params.update(random_state=RANDOM_STATE, n_jobs=-1, verbosity=-1)
+    params.update(
+        n_estimators=max(1, trial_iterations[study.best_trial.number]),
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbosity=-1,
+    )
     return lgb.LGBMClassifier(**params), study.best_value

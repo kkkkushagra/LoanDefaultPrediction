@@ -3,6 +3,8 @@ venv/
 data/*
 !data/.gitkeep
 mlruns/
+mlflow.db
+.coverage
 __pycache__/
 *.py[cod]
 .pytest_cache/

@@ -18,11 +18,13 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         bureau_path: str | Path | None = "data/bureau.csv",
+        external_paths: dict[str, str | Path] | None = None,
         iv_min: float = 0.02,
         iv_max: float = 0.5,
         bins: int = 10,
     ):
         self.bureau_path = bureau_path
+        self.external_paths = external_paths
         self.iv_min = iv_min
         self.iv_max = iv_max
         self.bins = bins
@@ -53,6 +55,7 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
             column for column in ["DAYS_EMPLOYED", "DAYS_CREDIT", "CREDIT_DAY_OVERDUE"]
             if column in frame and column not in candidates
         ]
+        candidates = list(dict.fromkeys(candidates))
         iv_rows = []
         self.woe_maps_ = {}
         self.bin_edges_ = {}
@@ -84,7 +87,7 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
             missing = result[column].isna() | result[column].isin([np.inf, -np.inf])
             labels = self._apply_bins(values, column)
             if missing.any():
-                labels.loc[missing] = "missing"
+                labels.iloc[np.flatnonzero(missing.to_numpy())] = "missing"
             output[f"WOE_{column}"] = labels.map(self.woe_maps_[column]).fillna(0.0)
         output = output.replace([np.inf, -np.inf], np.nan).fillna(0.0)
         return output.astype(float)
@@ -104,15 +107,24 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
             frame["EXT_SOURCE_MAX"] = sources.max(axis=1)
 
         bureau = pd.DataFrame(index=frame.index)
-        if self.bureau_path is None:
+        if "SK_ID_CURR" not in frame:
             return frame, bureau
-        path = Path(self.bureau_path)
-        if "SK_ID_CURR" in frame and path.exists():
+        paths = dict(self.external_paths or {})
+        if self.bureau_path is not None:
+            paths.setdefault("bureau", self.bureau_path)
+        for table, configured_path in paths.items():
+            path = Path(configured_path) if configured_path is not None else None
+            if path is None or not path.exists():
+                continue
             aggregated = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
-            bureau = aggregated.set_index("SK_ID_CURR").reindex(frame["SK_ID_CURR"])
-            bureau.index = frame.index
-            frame = pd.concat([frame.reset_index(drop=True), bureau.reset_index(drop=True)], axis=1).set_axis(frame.index)
-            self.bureau_columns_ = bureau.columns.tolist()
+            joined = aggregated.set_index("SK_ID_CURR").reindex(frame["SK_ID_CURR"])
+            joined.index = frame.index
+            joined = joined.loc[:, ~joined.columns.duplicated()]
+            joined.columns = [str(column) for column in joined.columns]
+            frame = frame.drop(columns=joined.columns.intersection(frame.columns), errors="ignore")
+            frame = pd.concat([frame, joined], axis=1)
+            bureau = pd.concat([bureau, joined], axis=1)
+            self.bureau_columns_.extend(joined.columns.tolist())
         return frame, bureau
 
     def _fit_edges(self, series: pd.Series) -> np.ndarray:
@@ -126,7 +138,7 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
     def _apply_bins(self, series: pd.Series, column: str) -> pd.Series:
         labels = pd.Series("-2", index=series.index, dtype=object)
         missing = series.isna() | series.isin([np.inf, -np.inf])
-        labels.loc[missing] = "missing"
+        labels.iloc[np.flatnonzero(missing.to_numpy())] = "missing"
         non_missing = ~missing
         edges = self.bin_edges_[column]
         if len(edges):
@@ -137,9 +149,9 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
                 labels=False,
                 include_lowest=True,
             ).astype(int).astype(str)
-            labels.loc[non_missing] = codes
+            labels.iloc[np.flatnonzero(non_missing.to_numpy())] = codes.to_numpy()
         else:
-            labels.loc[non_missing] = "0"
+            labels.iloc[np.flatnonzero(non_missing.to_numpy())] = "0"
         return labels
 
     def _bins(self, series: pd.Series, column: str):
