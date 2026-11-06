@@ -7,3 +7,5 @@ xgboost
 shap
 fastapi
 uvicorn
+pandera
+pytest
