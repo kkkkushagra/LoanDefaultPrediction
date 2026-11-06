@@ -1,0 +1,10 @@
+.venv/
+venv/
+data/
+!data/
+!data/.gitkeep
+mlruns/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
