@@ -25,10 +25,17 @@ from sklearn.preprocessing import StandardScaler
 
 RANDOM_STATE = 42
 EXCLUDED_COLUMNS = {"SK_ID_CURR", "TARGET"}
+SENSITIVE_COLUMNS = {
+    "CODE_GENDER",
+    "DAYS_BIRTH",
+    "AGE_YEARS",
+    "FLAG_OWN_CAR",
+    "FLAG_OWN_REALTY",
+}
 
 
 def load_model_features(frame: pd.DataFrame) -> pd.DataFrame:
-    features = frame.drop(columns=sorted(EXCLUDED_COLUMNS), errors="ignore").fillna(0.0)
+    features = frame.drop(columns=sorted(EXCLUDED_COLUMNS | SENSITIVE_COLUMNS), errors="ignore").fillna(0.0)
     names = {}
     used = set()
     for column in features.columns:
@@ -164,7 +171,10 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
         return float(np.mean(scores))
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
+    )
     study.optimize(objective, n_trials=trials, show_progress_bar=False)
     params = study.best_params.copy()
     params.update(eval_metric="aucpr", n_jobs=-1, random_state=RANDOM_STATE)
@@ -203,7 +213,10 @@ def tune_lightgbm(train_x, train_y, trials, cv):
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
         return float(np.mean(scores))
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
+    )
     study.optimize(objective, n_trials=trials, show_progress_bar=False)
     params = study.best_params.copy()
     params.update(random_state=RANDOM_STATE, n_jobs=-1, verbosity=-1)

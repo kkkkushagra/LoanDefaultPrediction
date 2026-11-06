@@ -11,6 +11,9 @@ def test_model_features_exclude_ids_and_target():
         "SK_ID_CURR": [1, 2],
         "TARGET": [0, 1],
         "AMT_CREDIT": [100, 200],
+        "CODE_GENDER": ["F", "M"],
+        "DAYS_BIRTH": [-10000, -20000],
+        "AGE_YEARS": [27.4, 54.8],
     })
     features = load_model_features(frame)
     assert "SK_ID_CURR" not in features

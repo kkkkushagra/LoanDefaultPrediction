@@ -88,7 +88,7 @@ def main(
                 tuned[name] = model
 
     all_models = {**models, **tuned}
-    best_name = max(results, key=lambda name: results[name]["auc_roc"])
+    best_name = max(results, key=lambda name: results[name]["cv_auc_roc"])
     best_model = all_models[best_name]
     Path("models").mkdir(exist_ok=True)
     joblib.dump({"model": best_model, "feature_columns": train_x.columns.tolist()}, "models/model_v1.joblib")
@@ -109,13 +109,14 @@ def main(
             f"| {row['model']} | {cv_text} | {row['auc_roc']:.6f} | {row['pr_auc']:.6f} | {row['ks']:.6f} | "
             f"{row['precision']:.6f} | {row['recall']:.6f} | {row['f1']:.6f} | {row['brier']:.6f} | {row['threshold']:.6f} |"
         )
-    auc_met = comparison.iloc[0]["auc_roc"] >= 0.78
-    ks_met = comparison.iloc[0]["ks"] >= 0.35
+    selected = comparison.loc[comparison["model"] == best_name].iloc[0]
+    auc_met = selected["auc_roc"] >= 0.78
+    ks_met = selected["ks"] >= 0.35
     lines += [
         "",
         f"- **Best model:** `{best_name}`",
-        f"- **AUC >= 0.78:** {'MET' if auc_met else 'NOT MET'} ({comparison.iloc[0]['auc_roc']:.6f})",
-        f"- **KS >= 0.35:** {'MET' if ks_met else 'NOT MET'} ({comparison.iloc[0]['ks']:.6f})",
+        f"- **AUC >= 0.78:** {'MET' if auc_met else 'NOT MET'} ({selected['auc_roc']:.6f})",
+        f"- **KS >= 0.35:** {'MET' if ks_met else 'NOT MET'} ({selected['ks']:.6f})",
         "- The test set was used only for final evaluation. Thresholds were selected using train-only out-of-fold predictions.",
         "",
     ]
