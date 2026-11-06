@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import joblib
+import pandas as pd
 
 from .loading import load_application_data
 from .preprocessing import clean_application_data, extract_audit_frame
@@ -27,8 +28,12 @@ def main(
     train_x = preprocessor.fit_transform(train_x)
     test_x = preprocessor.transform(test_x)
 
-    train_x.assign(TARGET=train_y).to_parquet(output / "train.parquet", index=False)
-    test_x.assign(TARGET=test_y).to_parquet(output / "test.parquet", index=False)
+    pd.concat([train_x, train_y.rename("TARGET")], axis=1).to_parquet(
+        output / "train.parquet", index=False
+    )
+    pd.concat([test_x, test_y.rename("TARGET")], axis=1).to_parquet(
+        output / "test.parquet", index=False
+    )
     joblib.dump(preprocessor, output / "preprocessor.joblib")
     return preprocessor
 
