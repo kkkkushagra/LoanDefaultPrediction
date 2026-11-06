@@ -18,18 +18,27 @@ class DataPreprocessor:
         self.outlier_bounds_: dict[str, tuple[float, float]] = {}
         self.numeric_columns_: list[str] = []
         self.categorical_columns_: list[str] = []
+        self.input_columns_: list[str] = []
+        self.missing_indicator_columns_: list[str] = []
         self.encoder_: OneHotEncoder | None = None
 
     def fit(self, frame: pd.DataFrame):
         frame = frame.replace([np.inf, -np.inf], np.nan)
+        self.input_columns_ = frame.columns.tolist()
         self.numeric_columns_ = frame.select_dtypes(include=np.number).columns.tolist()
         self.categorical_columns_ = frame.select_dtypes(exclude=np.number).columns.tolist()
+        self.missing_indicator_columns_ = (
+            frame.columns[frame.isna().mean().gt(0.05)].tolist()
+        )
 
         for column in self.numeric_columns_:
             values = frame[column].dropna()
             bounds = values.quantile(self.outlier_quantiles).tolist()
-            self.outlier_bounds_[column] = (float(bounds[0]), float(bounds[1]))
-            self.numeric_medians_[column] = float(values.median())
+            if values.empty:
+                self.outlier_bounds_[column] = (0.0, 0.0)
+            else:
+                self.outlier_bounds_[column] = (float(bounds[0]), float(bounds[1]))
+            self.numeric_medians_[column] = float(values.median()) if not values.empty else 0.0
 
         for column in self.categorical_columns_:
             modes = frame[column].dropna().mode()
@@ -40,6 +49,7 @@ class DataPreprocessor:
         return self
 
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
+        frame = frame.reindex(columns=self.input_columns_)
         numeric = frame[self.numeric_columns_].copy()
         for column in self.numeric_columns_:
             numeric[column] = numeric[column].clip(*self.outlier_bounds_[column])
@@ -48,6 +58,10 @@ class DataPreprocessor:
         encoded = self.encoder_.transform(self._categorical(frame))
         names = self.encoder_.get_feature_names_out(self.categorical_columns_)
         encoded_frame = pd.DataFrame(encoded, index=frame.index, columns=names)
+        if self.missing_indicator_columns_:
+            indicators = frame[self.missing_indicator_columns_].isna().astype("int8")
+            indicators.columns = [f"{column}_missing" for column in indicators.columns]
+            encoded_frame = pd.concat([indicators, encoded_frame], axis=1)
         return pd.concat([numeric.astype(float), encoded_frame], axis=1)
 
     def fit_transform(self, frame: pd.DataFrame) -> pd.DataFrame:

@@ -3,7 +3,7 @@ import pytest
 
 from src.data.loading import load_application_data
 from src.data.pipeline import DataPreprocessor, prepare_data
-from src.data.preprocessing import clean_application_data
+from src.data.preprocessing import clean_application_data, extract_audit_frame
 
 
 @pytest.fixture
@@ -62,3 +62,41 @@ def test_prepare_data_splits_and_transforms(tmp_path, application_frame):
     assert len(test_x) == len(test_y) == 4
     assert not train_x.isna().any().any()
     assert not test_x.isna().any().any()
+
+
+def test_unseen_category_is_encoded(tmp_path, application_frame):
+    features, target = clean_application_data(application_frame)
+    preprocessor = DataPreprocessor().fit(features.iloc[:15])
+    transformed = preprocessor.transform(features.iloc[15:].assign(NAME_CONTRACT_TYPE="Unknown"))
+    assert not transformed.isna().any().any()
+
+
+def test_missing_columns_are_added_in_transform(application_frame):
+    features, _ = clean_application_data(application_frame)
+    preprocessor = DataPreprocessor().fit(features)
+    transformed = preprocessor.transform(features.drop(columns=["DAYS_EMPLOYED"]))
+    assert "DAYS_EMPLOYED" in preprocessor.numeric_columns_
+    assert not transformed.isna().any().any()
+
+
+def test_days_employed_sentinel_creates_anomaly(application_frame):
+    frame = application_frame.copy()
+    frame.loc[0, "DAYS_EMPLOYED"] = 365243
+    features, _ = clean_application_data(frame)
+    assert features.loc[0, "DAYS_EMPLOYED_ANOMALY"] == 1
+    assert pd.isna(features.loc[0, "DAYS_EMPLOYED"])
+
+
+def test_missing_indicators_are_train_learned(application_frame):
+    features, _ = clean_application_data(application_frame)
+    features["SPARSE_FIELD"] = [None] * 12 + list(range(8))
+    preprocessor = DataPreprocessor().fit(features.iloc[:15])
+    assert "SPARSE_FIELD" in preprocessor.missing_indicator_columns_
+
+
+def test_audit_columns_are_separate(application_frame):
+    audit = extract_audit_frame(application_frame)
+    features, _ = clean_application_data(application_frame)
+    assert {"CODE_GENDER", "AGE_YEARS"}.issubset(audit.columns)
+    assert "CODE_GENDER" not in features
+    assert "DAYS_BIRTH" not in features

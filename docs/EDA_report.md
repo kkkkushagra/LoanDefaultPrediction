@@ -17,12 +17,8 @@ Place the Home Credit `application_train.csv` file in `data/`; large raw data mu
 
 Numeric missing values and outlier bounds are learned only from training data. Categorical missing values use training modes. Categorical values are one-hot encoded with an unknown-category-safe encoder.
 
-## Planned checks
+## Real-data status
 
-Update this report after running the notebook with the real dataset:
+`data/application_train.csv` is not present in the repository, so notebook execution and numeric EDA findings cannot be reproduced in this checkout. Before submission, place the Home Credit training file in `data/`, run `python -m src.data.run`, and rerun the EDA notebook.
 
-- target prevalence and class imbalance
-- missing-value rates by feature
-- numeric distributions and trained outlier bounds
-- categorical cardinality and rare-category effects
-- train/test feature distributions and data drift
+The report must not invent findings for a dataset that was not executed. Once real data is available, record the row count, target prevalence, missing-value leaders, class imbalance, main numeric distributions, categorical cardinality, sentinel rates, and train/test drift.
