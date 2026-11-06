@@ -5,6 +5,7 @@ import pandas as pd
 
 from .loading import load_application_data
 from .preprocessing import clean_application_data, extract_audit_frame
+from src.features import FeaturePipeline
 
 
 def main(
@@ -35,6 +36,18 @@ def main(
         output / "test.parquet", index=False
     )
     joblib.dump(preprocessor, output / "preprocessor.joblib")
+    feature_source = features.copy()
+    feature_source["AGE_YEARS"] = audit["AGE_YEARS"].reindex(feature_source.index)
+    feature_pipeline = FeaturePipeline().fit(feature_source.loc[train_x.index], train_y.loc[train_x.index])
+    feature_train = feature_pipeline.transform(feature_source.loc[train_x.index])
+    feature_test = feature_pipeline.transform(feature_source.loc[test_x.index])
+    pd.concat([feature_train, train_y.loc[train_x.index].rename("TARGET")], axis=1).to_parquet(
+        output / "feature_train.parquet", index=False
+    )
+    pd.concat([feature_test, test_y.loc[test_x.index].rename("TARGET")], axis=1).to_parquet(
+        output / "feature_test.parquet", index=False
+    )
+    joblib.dump(feature_pipeline, output / "feature_pipeline.joblib")
     return preprocessor
 
 
