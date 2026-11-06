@@ -188,6 +188,10 @@ the sklearn-compatible feature pipeline, and pipeline tests. Model training, the
 and the React dashboard remain planned work toward the full production workflow.
 The real-data final matrices contain 302 columns including `SK_ID_CURR` and `TARGET`,
 with five retained WoE features plus the preprocessed application features.
+Task 3 model baselines and Optuna-tuned XGBoost/LightGBM candidates are saved in
+MLflow and documented in [model_comparison.md](./docs/model_comparison.md). The test
+AUC target of 0.78 is not yet met; the best AUC is 0.758409 and the KS target of
+0.35 is met at 0.384162.
 
 ## Team
 
