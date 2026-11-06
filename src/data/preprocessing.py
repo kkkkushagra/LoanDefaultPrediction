@@ -7,7 +7,7 @@ SENSITIVE_COLUMNS = AUDIT_COLUMNS | {"FLAG_OWN_CAR", "FLAG_OWN_REALTY"}
 
 
 def extract_audit_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    audit = frame.reindex(columns=AUDIT_COLUMNS).copy()
+    audit = frame.reindex(columns=["SK_ID_CURR", *AUDIT_COLUMNS]).copy()
     if "DAYS_BIRTH" in audit:
         audit["AGE_YEARS"] = (-audit["DAYS_BIRTH"] / 365.25).round(1)
     return audit

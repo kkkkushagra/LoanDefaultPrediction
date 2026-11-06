@@ -100,3 +100,20 @@ def test_audit_columns_are_separate(application_frame):
     assert {"CODE_GENDER", "AGE_YEARS"}.issubset(audit.columns)
     assert "CODE_GENDER" not in features
     assert "DAYS_BIRTH" not in features
+
+
+def test_binary_and_flag_columns_are_not_clipped():
+    frame = pd.DataFrame({
+        "FLAG_TEST": [0, 1] * 10,
+        "BINARY_VALUE": [0, 1] * 10,
+        "AMOUNT": range(20),
+    })
+    preprocessor = DataPreprocessor(outlier_quantiles=(0.01, 0.99)).fit(frame)
+    result = preprocessor.transform(frame)
+    assert set(result["FLAG_TEST"].unique()).issubset({0.0, 1.0})
+    assert set(result["BINARY_VALUE"].unique()).issubset({0.0, 1.0})
+
+
+def test_audit_join_is_preserved_on_application_id(application_frame):
+    audit = extract_audit_frame(application_frame.assign(SK_ID_CURR=range(20)))
+    assert audit["SK_ID_CURR"].tolist() == application_frame.index.tolist()

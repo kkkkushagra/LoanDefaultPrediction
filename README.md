@@ -186,6 +186,8 @@ LoanDefaultPrediction/
 The repository contains the project synopsis, real-data EDA, the data preprocessing pipeline,
 the sklearn-compatible feature pipeline, and pipeline tests. Model training, the scoring API,
 and the React dashboard remain planned work toward the full production workflow.
+The real-data final matrices contain 302 columns including `SK_ID_CURR` and `TARGET`,
+with five retained WoE features plus the preprocessed application features.
 
 ## Team
 

@@ -52,7 +52,8 @@ class DataPreprocessor:
         frame = frame.reindex(columns=self.input_columns_)
         numeric = frame[self.numeric_columns_].copy()
         for column in self.numeric_columns_:
-            numeric[column] = numeric[column].clip(*self.outlier_bounds_[column])
+            if not self._is_flag_column(column, frame[column]):
+                numeric[column] = numeric[column].clip(*self.outlier_bounds_[column])
             numeric[column] = numeric[column].fillna(self.numeric_medians_[column])
 
         encoded = self.encoder_.transform(self._categorical(frame))
@@ -72,6 +73,11 @@ class DataPreprocessor:
         for column in self.categorical_columns_:
             result[column] = result[column].fillna(self.categorical_modes_[column]).astype(str)
         return result
+
+    @staticmethod
+    def _is_flag_column(column: str, series: pd.Series) -> bool:
+        values = set(series.dropna().unique())
+        return column.startswith("FLAG_") or values and values.issubset({0, 1})
 
 
 def prepare_data(path: str | Path, test_size=0.2, random_state=42):
