@@ -133,6 +133,7 @@ def model_factories(scale_pos_weight):
         "lightgbm": lgb.LGBMClassifier(
             n_estimators=500,
             learning_rate=0.05,
+            metric="auc",
             num_leaves=31,
             subsample=0.8,
             colsample_bytree=0.8,
@@ -201,6 +202,7 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
         model = lgb.LGBMClassifier(
             n_estimators=trial.suggest_int("n_estimators", 250, 800),
             learning_rate=0.1 if fast else trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            metric="auc",
             num_leaves=trial.suggest_int("num_leaves", 15, 127),
             max_depth=trial.suggest_int("max_depth", -1, 10),
             min_child_samples=trial.suggest_int("min_child_samples", 5, 100),
@@ -221,6 +223,7 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
             model.fit(
                 fit_x, fit_y,
                 eval_set=[(valid_x, valid_y)],
+                eval_metric="auc",
                 callbacks=[lgb.early_stopping(50, verbose=False)],
             )
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
@@ -240,4 +243,5 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
         n_jobs=-1,
         verbosity=-1,
     )
+    params["metric"] = "auc"
     return lgb.LGBMClassifier(**params), study.best_value
