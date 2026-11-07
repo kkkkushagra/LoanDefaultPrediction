@@ -6,7 +6,7 @@ import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from .service import SENSITIVE_FIELDS, ScoringService
@@ -44,6 +44,11 @@ class SimulateRequest(BaseModel):
 
 
 app = FastAPI(title="Loan Default Calibration API")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs", status_code=307)
 
 
 @app.exception_handler(RequestValidationError)
