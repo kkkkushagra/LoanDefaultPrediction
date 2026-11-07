@@ -46,6 +46,7 @@ class ScoringService:
         matrix = pd.concat([processed.reset_index(drop=True), engineered.reset_index(drop=True)], axis=1)
         normalized = load_model_features(matrix)
         matrix = normalized.reindex(columns=self.features).fillna(0.0)
+        matrix = matrix.loc[:, self.features].copy()
         return matrix
 
     def predict(self, payload: dict) -> float:

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pandas as pd
 
 from backend.main import app
 
@@ -45,3 +46,16 @@ def test_simulation_is_monotonic_sanity():
     body = response.json()
     assert body["label"] == "hypothetical, not causal"
     assert body["hypothetical"]["calibrated_probability"] <= body["base"]["calibrated_probability"] + 0.01
+
+
+def test_model_input_columns_match_training_feature_order():
+    from backend.service import ScoringService
+
+    service = ScoringService()
+    matrix = service.transform({
+        "AMT_CREDIT": 300000,
+        "AMT_INCOME_TOTAL": 100000,
+        "AMT_ANNUITY": 25000,
+    })
+    assert isinstance(matrix, pd.DataFrame)
+    assert matrix.columns.tolist() == service.features
