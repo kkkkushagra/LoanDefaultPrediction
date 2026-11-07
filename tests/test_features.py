@@ -117,3 +117,30 @@ def test_domain_features_are_created_without_sensitive_columns():
     assert "EXT_SOURCE_PRODUCT_2_3" in result
     assert "ANNUITY_TO_CREDIT" in result
     assert "TARGET" not in result
+
+
+def test_transform_matches_expected_synthetic_result():
+    pipeline = FeaturePipeline(bureau_path=None)
+    pipeline.selected_features_ = ["DEBT_TO_INCOME", "MISSING_FEATURE"]
+    pipeline.raw_external_columns_ = ["EXT_SOURCE_1"]
+    pipeline.train_medians_ = {"DEBT_TO_INCOME": 1.5}
+    pipeline.bin_edges_ = {"DEBT_TO_INCOME": np.array([], dtype=float)}
+    pipeline.woe_maps_ = {
+        "DEBT_TO_INCOME": {"0": 0.25, "missing": -0.75},
+        "MISSING_FEATURE": {},
+    }
+    frame = pd.DataFrame({
+        "SK_ID_CURR": [10, 11, 12],
+        "AMT_CREDIT": [100.0, 200.0, np.nan],
+        "AMT_INCOME_TOTAL": [100.0, 100.0, 100.0],
+        "EXT_SOURCE_1": [0.1, np.nan, 0.3],
+    })
+
+    result = pipeline.transform(frame)
+
+    expected = pd.DataFrame({
+        "WOE_DEBT_TO_INCOME": [0.25, 0.25, -0.75],
+        "WOE_MISSING_FEATURE": [0.0, 0.0, 0.0],
+        "RAW_EXT_SOURCE_1": [0.1, np.nan, 0.3],
+    }, index=frame.index)
+    pd.testing.assert_frame_equal(result, expected)

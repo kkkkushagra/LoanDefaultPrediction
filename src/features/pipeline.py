@@ -84,21 +84,23 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
 
     def transform(self, frame: pd.DataFrame) -> pd.DataFrame:
         result, _ = self._engineer(frame.copy())
-        output = pd.DataFrame(index=result.index)
+        output_columns: dict[str, pd.Series] = {}
         for column in self.selected_features_:
             if column not in result:
-                output[f"WOE_{column}"] = 0.0
+                output_columns[f"WOE_{column}"] = pd.Series(0.0, index=result.index)
                 continue
             values = result[column].replace([np.inf, -np.inf], np.nan).fillna(self.train_medians_[column])
             missing = result[column].isna() | result[column].isin([np.inf, -np.inf])
             labels = self._apply_bins(values, column)
             if missing.any():
                 labels.iloc[np.flatnonzero(missing.to_numpy())] = "missing"
-            output[f"WOE_{column}"] = labels.map(self.woe_maps_[column]).fillna(0.0)
-        output = output.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+            output_columns[f"WOE_{column}"] = labels.map(self.woe_maps_[column]).fillna(0.0)
         for column in self.raw_external_columns_:
             if column in result:
-                output[f"RAW_{column}"] = result[column]
+                output_columns[f"RAW_{column}"] = result[column]
+        output = pd.DataFrame(output_columns, index=result.index)
+        woe_columns = [column for column in output if column.startswith("WOE_")]
+        output[woe_columns] = output[woe_columns].replace([np.inf, -np.inf], np.nan).fillna(0.0)
         return output.astype(float)
 
     def _engineer(self, frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
