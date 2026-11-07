@@ -8,7 +8,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
 
 from .training import (
     RANDOM_STATE,
@@ -19,6 +19,31 @@ from .training import (
     tune_lightgbm,
     tune_xgb,
 )
+
+
+def select_top_features(train_x, train_y, test_x, top_features=150):
+    if top_features is None:
+        return train_x, test_x
+    if top_features < 1:
+        raise ValueError("top_features must be positive or None")
+    selector = lgb.LGBMClassifier(
+        n_estimators=300,
+        learning_rate=0.05,
+        n_jobs=-1,
+        random_state=RANDOM_STATE,
+        verbosity=-1,
+    )
+    selector.fit(train_x, train_y)
+    gain = selector.booster_.feature_importance(importance_type="gain")
+    selected = [
+        column
+        for _, column in sorted(
+            zip(gain, train_x.columns),
+            key=lambda item: item[0],
+            reverse=True,
+        )[:top_features]
+    ]
+    return train_x[selected], test_x[selected]
 import lightgbm as lgb
 
 
@@ -59,6 +84,7 @@ def main(
     trials=30,
     fast=False,
     top_features=150,
+    no_scale_pos_weight=False,
 ):
     if top_features is not None and top_features < 1:
         raise ValueError("top_features must be positive or None")
@@ -69,36 +95,24 @@ def main(
 
     if top_features is not None:
         stage_start = time.perf_counter()
-        selector = lgb.LGBMClassifier(
-            n_estimators=300,
-            learning_rate=0.05,
-            n_jobs=-1,
-            random_state=RANDOM_STATE,
-            verbosity=-1,
-        )
-        selector.fit(train_x, train_y)
-        gain = selector.booster_.feature_importance(importance_type="gain")
-        selected = [
-            column
-            for _, column in sorted(
-                zip(gain, train_x.columns),
-                key=lambda item: item[0],
-                reverse=True,
-            )[:top_features]
-        ]
-        train_x = train_x[selected]
-        test_x = test_x[selected]
+        train_x, test_x = select_top_features(train_x, train_y, test_x, top_features)
         print(f"Top-feature selection: {time.perf_counter() - stage_start:.2f}s")
 
     cv = StratifiedKFold(n_splits=3 if fast else 5, shuffle=True, random_state=RANDOM_STATE)
-    scale_pos_weight = (len(train_y) - int(train_y.sum())) / int(train_y.sum())
+    scale_pos_weight = None if no_scale_pos_weight else (
+        (len(train_y) - int(train_y.sum())) / int(train_y.sum())
+    )
     models = model_factories(scale_pos_weight)
+    if fast and trials == 0:
+        models = {"logistic_regression": models["logistic_regression"]}
     if fast:
         models = {name: model for name, model in models.items() if name != "random_forest"}
         for model in models.values():
             if model.__class__.__name__ == "XGBClassifier":
                 model.set_params(tree_method="hist")
     results = {}
+    oof_probabilities = {}
+    test_probabilities = {}
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("loan-default-model-v1")
 
@@ -114,6 +128,8 @@ def main(
             mlflow.log_params(model.get_params())
             model.fit(train_x, train_y)
             probability = model.predict_proba(test_x)[:, 1]
+            oof_probabilities[name] = oof_probability
+            test_probabilities[name] = probability
             threshold = metrics_at_threshold(train_y, oof_probability)["threshold"]
             results[name] = evaluate(test_y, probability, threshold)
             results[name]["cv_auc_roc"] = cv_auc
@@ -127,11 +143,11 @@ def main(
     if optuna_available:
         candidates = {}
         tune_x, tune_y = train_x, train_y
-        if fast:
-            tune_x, _, tune_y, _ = __import__("sklearn.model_selection", fromlist=["train_test_split"]).train_test_split(
+        if fast or trials > 0:
+            tune_x, _, tune_y, _ = train_test_split(
                 train_x,
                 train_y,
-                train_size=0.30,
+                train_size=0.50,
                 random_state=RANDOM_STATE,
                 stratify=train_y,
             )
@@ -141,7 +157,14 @@ def main(
             ("lightgbm_tuned", tune_lightgbm),
         ):
             tuned_trials = 10 if fast else trials
-            model, cv_auc = tuner(tune_x, tune_y, tuned_trials, cv, fast=fast)
+            model, cv_auc = tuner(
+                tune_x,
+                tune_y,
+                tuned_trials,
+                cv,
+                fast=fast,
+                scale_pos_weight=scale_pos_weight,
+            )
             model.fit(train_x, train_y)
             candidates[name] = model
             oof_probability = cross_val_predict(
@@ -153,6 +176,8 @@ def main(
                 mlflow.log_params(model.get_params())
                 model.fit(train_x, train_y)
                 probability = model.predict_proba(test_x)[:, 1]
+                oof_probabilities[name] = oof_probability
+                test_probabilities[name] = probability
                 threshold = metrics_at_threshold(train_y, oof_probability)["threshold"]
                 results[name] = evaluate(test_y, probability, threshold)
                 results[name]["cv_auc_roc"] = cv_auc
@@ -163,11 +188,33 @@ def main(
                 tuned[name] = model
         print(f"Hyperparameter tuning and refit: {time.perf_counter() - stage_start:.2f}s")
 
+    blend_names = [
+        name for name in ("xgboost", "lightgbm", "logistic_regression")
+        if name in oof_probabilities and name in test_probabilities
+    ]
+    if len(blend_names) == 3:
+        blend_oof = np.mean([oof_probabilities[name] for name in blend_names], axis=0)
+        blend_test = np.mean([test_probabilities[name] for name in blend_names], axis=0)
+        threshold = metrics_at_threshold(train_y, blend_oof)["threshold"]
+        results["blend_mean"] = evaluate(test_y, blend_test, threshold)
+        results["blend_mean"]["cv_auc_roc"] = roc_auc_score(train_y, blend_oof)
+        results["blend_mean"].update(metrics_at_recall(train_y, blend_oof))
+
     all_models = {**models, **tuned}
     best_name = max(results, key=lambda name: results[name]["cv_auc_roc"])
-    best_model = all_models[best_name]
+    if best_name == "blend_mean":
+        best_model = None
+        artifact = {
+            "blend": "mean",
+            "blend_models": blend_names,
+            "models": {name: all_models[name] for name in blend_names},
+            "feature_columns": train_x.columns.tolist(),
+        }
+    else:
+        best_model = all_models[best_name]
+        artifact = {"model": best_model, "feature_columns": train_x.columns.tolist()}
     Path("models").mkdir(exist_ok=True)
-    joblib.dump({"model": best_model, "feature_columns": train_x.columns.tolist()}, "models/model_v1.joblib")
+    joblib.dump(artifact, "models/model_v1.joblib")
 
     rows = [{"model": name, **values} for name, values in results.items()]
     pd.DataFrame(rows).sort_values("auc_roc", ascending=False).to_csv("docs/model_comparison.csv", index=False)
@@ -191,6 +238,9 @@ def main(
     ks_met = selected["ks"] >= 0.35
     lines += [
         "",
+        f"- **Run mode:** `{'fast' if fast else 'full'}`",
+        f"- **Scale pos weight:** `{'disabled' if no_scale_pos_weight else 'enabled'}`",
+        "- Scale-pos-weight AUC/Brier comparison is reported by these modes when the run is repeated with and without `--no-scale-pos-weight`.",
         f"- **Best model:** `{best_name}`",
         f"- **AUC >= 0.78:** {'MET' if auc_met else 'NOT MET'} ({selected['auc_roc']:.6f})",
         f"- **KS >= 0.35:** {'MET' if ks_met else 'NOT MET'} ({selected['ks']:.6f})",
@@ -207,5 +257,15 @@ if __name__ == "__main__":
     parser.add_argument("--trials", type=int, default=30)
     parser.add_argument("--fast", action="store_true", help="Use the reduced tuning workload")
     parser.add_argument("--top-features", type=int, default=150, metavar="N")
+    parser.add_argument(
+        "--no-scale-pos-weight",
+        action="store_true",
+        help="Disable scale_pos_weight for XGBoost and LightGBM",
+    )
     args = parser.parse_args()
-    main(trials=args.trials, fast=args.fast, top_features=args.top_features)
+    main(
+        trials=args.trials,
+        fast=args.fast,
+        top_features=args.top_features,
+        no_scale_pos_weight=args.no_scale_pos_weight,
+    )

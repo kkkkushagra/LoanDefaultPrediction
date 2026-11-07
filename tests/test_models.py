@@ -20,6 +20,43 @@ def test_model_features_exclude_ids_and_target():
     assert features.columns.tolist() == ["AMT_CREDIT"]
 
 
+def test_top_feature_selection_fits_on_train_only(monkeypatch):
+    from src.models import run
+
+    fitted = {}
+
+    class Selector:
+        def __init__(self, **kwargs):
+            pass
+
+        def fit(self, train_x, train_y):
+            fitted["columns"] = train_x.columns.tolist()
+            fitted["rows"] = train_x.shape[0]
+            return self
+
+        @property
+        def booster_(self):
+            return self
+
+        def feature_importance(self, importance_type):
+            return np.array([9.0, 1.0])
+
+    monkeypatch.setattr(run.lgb, "LGBMClassifier", Selector)
+    train_x = pd.DataFrame({"useful": [1, 2, 3], "unused": [0, 0, 0]})
+    test_x = pd.DataFrame({"useful": [99, 100], "unused": [99, 100]})
+
+    selected_train, selected_test = run.select_top_features(
+        train_x,
+        pd.Series([0, 1, 0]),
+        test_x,
+        top_features=1,
+    )
+
+    assert fitted == {"columns": ["useful", "unused"], "rows": 3}
+    assert selected_train.columns.tolist() == ["useful"]
+    assert selected_test.columns.tolist() == ["useful"]
+
+
 def test_run_module_smoke(tmp_path, monkeypatch):
     from src.models import run
 
@@ -38,6 +75,8 @@ def test_run_module_smoke(tmp_path, monkeypatch):
         train_path=tmp_path / "train.parquet",
         test_path=tmp_path / "test.parquet",
         trials=0,
+        fast=True,
+        top_features=None,
     )
     assert best_name
     assert Path("models/model_v1.joblib").exists()

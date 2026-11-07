@@ -145,24 +145,37 @@ def model_factories(scale_pos_weight):
     }
 
 
-def tune_xgb(train_x, train_y, trials, cv, fast=False):
+def tune_xgb(train_x, train_y, trials, cv, fast=False, scale_pos_weight=None):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
     trial_iterations = {}
+    default_scale_pos_weight = None if scale_pos_weight is None else negative / positive
+    default_params = {
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "min_child_weight": 1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.0,
+        "reg_lambda": 1.0,
+    }
 
     def objective(trial):
         model = xgb.XGBClassifier(
-            n_estimators=trial.suggest_int("n_estimators", 250, 800),
-            learning_rate=0.1 if fast else trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            n_estimators=2000,
+            learning_rate=0.05,
             max_depth=trial.suggest_int("max_depth", 3, 8),
             min_child_weight=trial.suggest_int("min_child_weight", 1, 20),
             subsample=trial.suggest_float("subsample", 0.7, 1.0),
             colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
             reg_alpha=trial.suggest_float("reg_alpha", 1e-8, 10, log=True),
             reg_lambda=trial.suggest_float("reg_lambda", 1e-8, 10, log=True),
-            scale_pos_weight=trial.suggest_float("scale_pos_weight", negative / positive * 0.5, negative / positive * 1.5),
-            eval_metric="aucpr",
-            early_stopping_rounds=50,
+            scale_pos_weight=(
+                None if scale_pos_weight is None
+                else trial.suggest_float("scale_pos_weight", negative / positive * 0.5, negative / positive * 1.5)
+            ),
+            eval_metric="auc",
+            early_stopping_rounds=200,
             tree_method="hist" if fast else None,
             n_jobs=-1,
             random_state=RANDOM_STATE,
@@ -182,26 +195,41 @@ def tune_xgb(train_x, train_y, trials, cv, fast=False):
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
     )
-    study.optimize(objective, n_trials=trials, show_progress_bar=False)
+    study.enqueue_trial(default_params | {
+        "scale_pos_weight": default_scale_pos_weight,
+    })
+    study.optimize(objective, n_trials=max(1, trials), show_progress_bar=False)
     params = study.best_params.copy()
     params.update(
-        n_estimators=max(1, trial_iterations[study.best_trial.number]),
-        eval_metric="aucpr",
+        n_estimators=max(1, int(1.1 * trial_iterations[study.best_trial.number])),
+        learning_rate=0.05,
+        eval_metric="auc",
         n_jobs=-1,
         random_state=RANDOM_STATE,
     )
     return xgb.XGBClassifier(**params), study.best_value
 
 
-def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
+def tune_lightgbm(train_x, train_y, trials, cv, fast=False, scale_pos_weight=None):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
     trial_iterations = {}
+    default_scale_pos_weight = None if scale_pos_weight is None else negative / positive
+    default_params = {
+        "learning_rate": 0.05,
+        "max_depth": -1,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+    }
 
     def objective(trial):
         model = lgb.LGBMClassifier(
-            n_estimators=trial.suggest_int("n_estimators", 250, 800),
-            learning_rate=0.1 if fast else trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            n_estimators=2000,
+            learning_rate=0.05,
             metric="auc",
             num_leaves=trial.suggest_int("num_leaves", 15, 127),
             max_depth=trial.suggest_int("max_depth", -1, 10),
@@ -210,7 +238,10 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
             colsample_bytree=trial.suggest_float("colsample_bytree", 0.7, 1.0),
             reg_alpha=trial.suggest_float("reg_alpha", 1e-8, 10, log=True),
             reg_lambda=trial.suggest_float("reg_lambda", 1e-8, 10, log=True),
-            scale_pos_weight=trial.suggest_float("scale_pos_weight", negative / positive * 0.5, negative / positive * 1.5),
+            scale_pos_weight=(
+                None if scale_pos_weight is None
+                else trial.suggest_float("scale_pos_weight", negative / positive * 0.5, negative / positive * 1.5)
+            ),
             n_jobs=-1,
             random_state=RANDOM_STATE,
             verbosity=-1,
@@ -224,7 +255,7 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
                 fit_x, fit_y,
                 eval_set=[(valid_x, valid_y)],
                 eval_metric="auc",
-                callbacks=[lgb.early_stopping(50, verbose=False)],
+                callbacks=[lgb.early_stopping(200, verbose=False)],
             )
             scores.append(roc_auc_score(valid_y, model.predict_proba(valid_x)[:, 1]))
             iterations.append(int(model.best_iteration_))
@@ -235,10 +266,14 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
     )
-    study.optimize(objective, n_trials=trials, show_progress_bar=False)
+    study.enqueue_trial(default_params | {
+        "scale_pos_weight": default_scale_pos_weight,
+    })
+    study.optimize(objective, n_trials=max(1, trials), show_progress_bar=False)
     params = study.best_params.copy()
     params.update(
-        n_estimators=max(1, trial_iterations[study.best_trial.number]),
+        n_estimators=max(1, int(1.1 * trial_iterations[study.best_trial.number])),
+        learning_rate=0.05,
         random_state=RANDOM_STATE,
         n_jobs=-1,
         verbosity=-1,

@@ -9,6 +9,8 @@
 | lightgbm_tuned | 0.724163 | 0.723150 | 0.190351 | 0.338433 | 0.196997 | 0.459819 | 0.275825 | 0.072880 | 0.146796 | 0.706193 | 0.141541 |
 
 - **Best model:** `xgboost`
+- **Run mode:** `fast`
+- **Scale pos weight:** `enabled`
 - **AUC >= 0.78:** NOT MET (0.775890)
 - **KS >= 0.35:** MET (0.416131)
 - The test set was used only for final evaluation. Thresholds were selected using train-only out-of-fold predictions.
