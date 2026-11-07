@@ -29,19 +29,10 @@ def main(
     train_processed = preprocessor.fit_transform(train_x)
     test_processed = preprocessor.transform(test_x)
 
-    bureau_agg = output / "bureau_agg.parquet"
-    bureau_source = Path("data/bureau.csv")
-    if bureau_source.exists() and not bureau_agg.exists():
-        bureau_raw = pd.read_csv(bureau_source)
-        numeric = bureau_raw.select_dtypes(include="number").columns
-        numeric = [column for column in numeric if column != "SK_ID_CURR"]
-        bureau = bureau_raw.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "sum"])
-        bureau.columns = [f"BUREAU_{column}_{stat}" for column, stat in bureau.columns]
-        bureau.reset_index().to_parquet(bureau_agg, index=False)
-
     from scripts.aggregate_external_data import main as aggregate_external
     aggregate_external("data", output)
 
+    bureau_agg = output / "bureau_agg.parquet"
     feature_source = features.copy()
     feature_source["SK_ID_CURR"] = source["SK_ID_CURR"].reindex(feature_source.index)
     feature_pipeline = FeaturePipeline(

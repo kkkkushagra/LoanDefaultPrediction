@@ -140,6 +140,8 @@ def test_external_aggregates(tmp_path):
     })
 
     assert "BUREAU_AMT_CREDIT_SUM_MEAN_AGG" in bureau_aggregates(bureau).columns
+    assert "BUREAU_ROW_COUNT" in bureau_aggregates(bureau).columns
+    assert "SUM_AGG" not in bureau_aggregates(bureau).columns
     assert previous_application_aggregates(previous)["PREV_APPROVED_SHARE"].iloc[0] == 0.5
     assert installment_aggregates(installments)["INSTALL_LATE_PAYMENT_RATE"].iloc[0] == 0.5
 
@@ -165,3 +167,25 @@ def test_data_run_smoke(tmp_path, monkeypatch):
     main("data/application_train.csv", "data/processed")
     assert (source_dir / "processed" / "train.parquet").exists()
     assert (source_dir / "processed" / "test.parquet").exists()
+
+
+def test_external_data_main_loads_installments(tmp_path):
+    from scripts.aggregate_external_data import main
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    pd.DataFrame({
+        "SK_ID_PREV": [1],
+        "SK_ID_CURR": [10],
+        "NUM_INSTALMENT_VERSION": [1.0],
+        "NUM_INSTALMENT_NUMBER": [1.0],
+        "DAYS_INSTALMENT": [-10.0],
+        "DAYS_ENTRY_PAYMENT": [-9.0],
+        "AMT_INSTALMENT": [100.0],
+        "AMT_PAYMENT": [100.0],
+    }).to_csv(data_dir / "installments_payments.csv", index=False)
+
+    main(data_dir, tmp_path / "processed")
+
+    result = pd.read_parquet(tmp_path / "processed" / "installments_payments_agg.parquet")
+    assert "INSTALL_AMT_PAYMENT_MEAN_AGG" in result.columns

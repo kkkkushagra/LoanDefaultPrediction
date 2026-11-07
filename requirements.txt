@@ -16,7 +16,7 @@ lightgbm==4.6.0
 mlflow==3.8.1
 SQLAlchemy==2.0.44
 alembic==1.17.2
-kaggle==1.7.4.5
+kaggle==1.8.4
 optuna==4.6.0
 httpx==0.28.1
 imbalanced-learn==0.14.2

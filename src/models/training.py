@@ -126,6 +126,7 @@ def model_factories(scale_pos_weight):
             colsample_bytree=0.8,
             scale_pos_weight=scale_pos_weight,
             eval_metric="aucpr",
+            tree_method="hist",
             n_jobs=-1,
             random_state=RANDOM_STATE,
         ),
@@ -143,7 +144,7 @@ def model_factories(scale_pos_weight):
     }
 
 
-def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
+def tune_xgb(train_x, train_y, trials, cv, fast=False):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
     trial_iterations = {}
@@ -151,7 +152,7 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
     def objective(trial):
         model = xgb.XGBClassifier(
             n_estimators=trial.suggest_int("n_estimators", 250, 800),
-            learning_rate=trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            learning_rate=0.1 if fast else trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
             max_depth=trial.suggest_int("max_depth", 3, 8),
             min_child_weight=trial.suggest_int("min_child_weight", 1, 20),
             subsample=trial.suggest_float("subsample", 0.7, 1.0),
@@ -161,6 +162,7 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
             scale_pos_weight=trial.suggest_float("scale_pos_weight", negative / positive * 0.5, negative / positive * 1.5),
             eval_metric="aucpr",
             early_stopping_rounds=50,
+            tree_method="hist" if fast else None,
             n_jobs=-1,
             random_state=RANDOM_STATE,
         )
@@ -190,7 +192,7 @@ def tune_xgb(train_x, train_y, trials, cv, directory="mlruns"):
     return xgb.XGBClassifier(**params), study.best_value
 
 
-def tune_lightgbm(train_x, train_y, trials, cv):
+def tune_lightgbm(train_x, train_y, trials, cv, fast=False):
     positive = int(train_y.sum())
     negative = len(train_y) - positive
     trial_iterations = {}
@@ -198,7 +200,7 @@ def tune_lightgbm(train_x, train_y, trials, cv):
     def objective(trial):
         model = lgb.LGBMClassifier(
             n_estimators=trial.suggest_int("n_estimators", 250, 800),
-            learning_rate=trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            learning_rate=0.1 if fast else trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
             num_leaves=trial.suggest_int("num_leaves", 15, 127),
             max_depth=trial.suggest_int("max_depth", -1, 10),
             min_child_samples=trial.suggest_int("min_child_samples", 5, 100),
