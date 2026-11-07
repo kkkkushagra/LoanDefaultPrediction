@@ -37,6 +37,17 @@ def bureau_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
         if "SK_ID_BUREAU" in frame
         else frame.groupby("SK_ID_CURR").size()
     )
+    active = frame[frame.get("CREDIT_ACTIVE").eq("Active")] if "CREDIT_ACTIVE" in frame else frame.iloc[0:0]
+    if not active.empty and {"AMT_CREDIT_SUM_DEBT", "AMT_CREDIT_SUM"}.issubset(active):
+        active_totals = active.groupby("SK_ID_CURR")[["AMT_CREDIT_SUM_DEBT", "AMT_CREDIT_SUM"]].sum()
+        result = result.set_index("SK_ID_CURR")
+        result["BUREAU_ACTIVE_DEBT_CREDIT_RATIO"] = (
+            active_totals["AMT_CREDIT_SUM_DEBT"].div(active_totals["AMT_CREDIT_SUM"].replace(0, float("nan")))
+        ).reindex(result.index)
+        if "CREDIT_DAY_OVERDUE" in active:
+            result["BUREAU_ACTIVE_OVERDUE_MEAN"] = (
+                active.assign(overdue=active["CREDIT_DAY_OVERDUE"].fillna(0).gt(0)).groupby("SK_ID_CURR")["overdue"].mean()
+            ).reindex(result.index)
     return result.reset_index()
 
 
@@ -56,7 +67,24 @@ def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
         for status_name in ("Approved", "Refused"):
             if status_name in status:
                 result[f"PREV_{status_name.upper()}_SHARE"] = status[status_name]
-    return result.reset_index()
+    if {"AMT_APPLICATION", "AMT_CREDIT"}.issubset(frame):
+        ratios = frame.assign(
+            ratio=frame["AMT_APPLICATION"].div(frame["AMT_CREDIT"].replace(0, float("nan")))
+        ).groupby("SK_ID_CURR")["ratio"].mean()
+        result["PREV_APPLICATION_CREDIT_RATIO"] = ratios.reindex(result.index)
+    if "NAME_CONTRACT_STATUS" in frame:
+        for status_name in ("Approved", "Refused"):
+            subset = frame[frame["NAME_CONTRACT_STATUS"].eq(status_name)]
+            if not subset.empty and "AMT_APPLICATION" in subset:
+                result[f"PREV_{status_name.upper()}_AMT_APPLICATION_MEAN"] = (
+                    subset.groupby("SK_ID_CURR")["AMT_APPLICATION"].mean().reindex(result.index)
+                )
+            if not subset.empty and "AMT_CREDIT" in subset:
+                result[f"PREV_{status_name.upper()}_AMT_CREDIT_MEAN"] = (
+                    subset.groupby("SK_ID_CURR")["AMT_CREDIT"].mean().reindex(result.index)
+                )
+    result = result.reset_index()
+    return result
 
 
 def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -70,6 +98,53 @@ def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
         result["INSTALL_LATE_PAYMENT_RATE"] = (
             frame["DAYS_ENTRY_PAYMENT"].gt(frame["DAYS_INSTALMENT"]).groupby(frame["SK_ID_CURR"]).mean()
         )
+    if {"AMT_PAYMENT", "AMT_INSTALMENT"}.issubset(frame):
+        ratio = frame.assign(
+            ratio=frame["AMT_PAYMENT"].div(frame["AMT_INSTALMENT"].replace(0, float("nan")))
+        ).groupby("SK_ID_CURR")["ratio"].mean()
+        result["INSTALL_PAYMENT_RATIO_MEAN"] = ratio.reindex(result.index)
+    if {"DAYS_ENTRY_PAYMENT", "DAYS_INSTALMENT"}.issubset(frame):
+        timing = frame["DAYS_ENTRY_PAYMENT"] - frame["DAYS_INSTALMENT"]
+        result["INSTALL_DAYS_LATE_MEAN"] = timing.clip(lower=0).groupby(frame["SK_ID_CURR"]).mean().reindex(result.index)
+        result["INSTALL_DAYS_EARLY_MEAN"] = timing.clip(upper=0).abs().groupby(frame["SK_ID_CURR"]).mean().reindex(result.index)
+    result = result.reset_index()
+    return result
+
+
+def pos_cash_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
+    numeric = frame.select_dtypes(include="number").columns.difference(
+        ["SK_ID_CURR", "SK_ID_PREV", "SK_ID_BUREAU"]
+    )
+    result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
+    result.columns = [f"POS_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result["POS_ROW_COUNT"] = (
+        frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
+        if "SK_ID_PREV" in frame
+        else frame.groupby("SK_ID_CURR").size()
+    )
+    for column in ("SK_DPD", "SK_DPD_DEF"):
+        if column in frame:
+            result[f"POS_{column}_LATE_RATE"] = frame[column].gt(0).groupby(frame["SK_ID_CURR"]).mean()
+    return result.reset_index()
+
+
+def credit_card_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
+    numeric = frame.select_dtypes(include="number").columns.difference(
+        ["SK_ID_CURR", "SK_ID_PREV", "SK_ID_BUREAU"]
+    )
+    result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
+    result.columns = [f"CREDIT_CARD_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result["CREDIT_CARD_ROW_COUNT"] = (
+        frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
+        if "SK_ID_PREV" in frame
+        else frame.groupby("SK_ID_CURR").size()
+    )
+    if {"AMT_BALANCE", "AMT_CREDIT_LIMIT_ACTUAL"}.issubset(frame):
+        utilisation = frame["AMT_BALANCE"].div(frame["AMT_CREDIT_LIMIT_ACTUAL"].replace(0, float("nan")))
+        result["CREDIT_CARD_UTILISATION_MEAN"] = utilisation.groupby(frame["SK_ID_CURR"]).mean()
+    for column in ("SK_DPD", "SK_DPD_DEF"):
+        if column in frame:
+            result[f"CREDIT_CARD_{column}_LATE_RATE"] = frame[column].gt(0).groupby(frame["SK_ID_CURR"]).mean()
     return result.reset_index()
 
 
@@ -81,6 +156,8 @@ def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed
         ("bureau.csv", bureau_aggregates, "bureau_agg.parquet"),
         ("previous_application.csv", previous_application_aggregates, "previous_application_agg.parquet"),
         ("installments_payments.csv", installment_aggregates, "installments_payments_agg.parquet"),
+        ("POS_CASH_balance.csv", pos_cash_aggregates, "pos_cash_agg.parquet"),
+        ("credit_card_balance.csv", credit_card_aggregates, "credit_card_agg.parquet"),
     ]
     for filename, aggregate, target in specifications:
         path = data / filename

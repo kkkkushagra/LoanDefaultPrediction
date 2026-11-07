@@ -189,6 +189,37 @@ def test_external_aggregates_real_table_shapes():
     assert "INSTALL_LATE_PAYMENT_RATE" in installment_result
 
 
+def test_balance_external_aggregates():
+    from scripts.aggregate_external_data import (
+        credit_card_aggregates,
+        pos_cash_aggregates,
+    )
+
+    pos_cash = pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 2],
+        "SK_ID_PREV": [10, 10, 20],
+        "SK_DPD": [0, 5, 0],
+        "SK_DPD_DEF": [0, 1, 0],
+        "CNT_INSTALMENT_FUTURE": [2, 1, 3],
+    })
+    credit_card = pd.DataFrame({
+        "SK_ID_CURR": [1, 1, 2],
+        "SK_ID_PREV": [10, 10, 20],
+        "AMT_BALANCE": [100.0, 50.0, 0.0],
+        "AMT_CREDIT_LIMIT_ACTUAL": [200.0, 200.0, 100.0],
+        "SK_DPD": [0, 1, 0],
+        "SK_DPD_DEF": [0, 0, 0],
+    })
+
+    pos_result = pos_cash_aggregates(pos_cash)
+    card_result = credit_card_aggregates(credit_card)
+
+    assert "POS_SK_DPD_LATE_RATE" in pos_result
+    assert pos_result.loc[pos_result["SK_ID_CURR"] == 1, "POS_SK_DPD_LATE_RATE"].iloc[0] == 0.5
+    assert "CREDIT_CARD_UTILISATION_MEAN" in card_result
+    assert card_result.loc[card_result["SK_ID_CURR"] == 1, "CREDIT_CARD_UTILISATION_MEAN"].iloc[0] == pytest.approx(0.375)
+
+
 def test_data_run_smoke(tmp_path, monkeypatch):
     from src.data.run import main
 

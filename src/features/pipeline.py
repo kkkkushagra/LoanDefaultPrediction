@@ -35,6 +35,7 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
         self.bureau_columns_: list[str] = []
         self.bin_edges_: dict[str, np.ndarray] = {}
         self.train_medians_: dict[str, float] = {}
+        self.raw_external_columns_: list[str] = []
 
     def fit(self, frame: pd.DataFrame, target: pd.Series):
         frame = frame.copy()
@@ -47,6 +48,10 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
                 "EXT_SOURCE_MEAN",
                 "EXT_SOURCE_MIN",
                 "EXT_SOURCE_MAX",
+                "EXT_SOURCE_WEIGHTED_MEAN",
+                "ANNUITY_TO_CREDIT",
+                "EXT_SOURCE_PRODUCT_1_2",
+                "EXT_SOURCE_PRODUCT_2_3",
                 *bureau.columns,
             ]
             if column in frame
@@ -73,6 +78,7 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
 
         self.iv_table_ = pd.DataFrame(iv_rows).sort_values("iv", ascending=False).reset_index(drop=True)
         self.selected_features_ = list(self.woe_maps_)
+        self.raw_external_columns_ = list(dict.fromkeys(self.bureau_columns_))
         self.output_columns_ = self.transform(frame.iloc[: min(100, len(frame))]).columns.tolist()
         return self
 
@@ -90,6 +96,9 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
                 labels.iloc[np.flatnonzero(missing.to_numpy())] = "missing"
             output[f"WOE_{column}"] = labels.map(self.woe_maps_[column]).fillna(0.0)
         output = output.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        for column in self.raw_external_columns_:
+            if column in result:
+                output[f"RAW_{column}"] = result[column]
         return output.astype(float)
 
     def _engineer(self, frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -105,6 +114,17 @@ class FeaturePipeline(BaseEstimator, TransformerMixin):
             frame["EXT_SOURCE_MEAN"] = sources.mean(axis=1)
             frame["EXT_SOURCE_MIN"] = sources.min(axis=1)
             frame["EXT_SOURCE_MAX"] = sources.max(axis=1)
+            weights = pd.Series({"EXT_SOURCE_1": 1.0, "EXT_SOURCE_2": 2.0, "EXT_SOURCE_3": 3.0})
+            available = [column for column in source_columns if column in weights.index]
+            if available:
+                weighted = frame[available].mul(weights[available])
+                frame["EXT_SOURCE_WEIGHTED_MEAN"] = weighted.sum(axis=1) / frame[available].notna().mul(weights[available]).sum(axis=1)
+        if {"AMT_ANNUITY", "AMT_CREDIT"}.issubset(frame):
+            frame["ANNUITY_TO_CREDIT"] = safe_divide(frame["AMT_ANNUITY"], frame["AMT_CREDIT"])
+        if "EXT_SOURCE_PRODUCT_1_2" not in frame and {"EXT_SOURCE_1", "EXT_SOURCE_2"}.issubset(frame):
+            frame["EXT_SOURCE_PRODUCT_1_2"] = frame["EXT_SOURCE_1"] * frame["EXT_SOURCE_2"]
+        if "EXT_SOURCE_PRODUCT_2_3" not in frame and {"EXT_SOURCE_2", "EXT_SOURCE_3"}.issubset(frame):
+            frame["EXT_SOURCE_PRODUCT_2_3"] = frame["EXT_SOURCE_2"] * frame["EXT_SOURCE_3"]
 
         bureau = pd.DataFrame(index=frame.index)
         if "SK_ID_CURR" not in frame:

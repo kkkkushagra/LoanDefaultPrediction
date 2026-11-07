@@ -41,6 +41,8 @@ def main(
             "bureau": bureau_agg,
             "previous": output / "previous_application_agg.parquet",
             "installments": output / "installments_payments_agg.parquet",
+            "pos_cash": output / "pos_cash_agg.parquet",
+            "credit_card": output / "credit_card_agg.parquet",
         },
     ).fit(feature_source.loc[train_x.index], train_y.loc[train_x.index])
     feature_train = feature_pipeline.transform(feature_source.loc[train_x.index])

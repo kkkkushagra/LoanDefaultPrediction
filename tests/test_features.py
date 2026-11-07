@@ -102,3 +102,18 @@ def test_external_aggregate_join_is_train_only(tmp_path):
     ).fit(frame, pd.Series([0, 1] * 15))
     transformed = pipeline.transform(frame)
     assert transformed.shape[0] == len(frame)
+    assert any(column.startswith("RAW_EXTERNAL_TOTAL") for column in transformed.columns)
+
+
+def test_domain_features_are_created_without_sensitive_columns():
+    frame = feature_frame()
+    pipeline = FeaturePipeline(bureau_path=None, iv_min=0.0, iv_max=10.0).fit(
+        frame.iloc[:30],
+        pd.Series([0, 1] * 15),
+    )
+    result, _ = pipeline._engineer(frame)
+    assert "EXT_SOURCE_WEIGHTED_MEAN" in result
+    assert "EXT_SOURCE_PRODUCT_1_2" in result
+    assert "EXT_SOURCE_PRODUCT_2_3" in result
+    assert "ANNUITY_TO_CREDIT" in result
+    assert "TARGET" not in result
