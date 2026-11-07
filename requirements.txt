@@ -13,10 +13,10 @@ pytest-cov==7.0.0
 joblib==1.6.0
 pyarrow==24.0.0
 lightgbm==4.6.0
-mlflow==3.8.1
+mlflow>=3.18
 SQLAlchemy==2.0.44
 alembic==1.17.2
-kaggle==1.8.4
+kaggle==2.2.5
 optuna==4.6.0
 httpx==0.28.1
 imbalanced-learn==0.14.2
