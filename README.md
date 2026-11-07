@@ -197,6 +197,20 @@ Task 3b external-table support is available through
 `python scripts/download_external_data.py` (requires Kaggle credentials) followed by
 `python scripts/aggregate_external_data.py`.
 
+## Calibration API
+
+Start the local API without retraining:
+
+```powershell
+py -m uvicorn backend.main:app --reload
+```
+
+```powershell
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000}"
+curl -X POST http://localhost:8000/explain -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000}"
+```
+
 ## Team
 
 - Team ID: 36

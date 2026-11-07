@@ -1,0 +1,22 @@
+{
+  "rows": [
+    {
+      "band": "Low",
+      "count": 40124,
+      "applicant_share": 0.652390940279336,
+      "observed_default_rate": 0.032025720267171764
+    },
+    {
+      "band": "Medium",
+      "count": 13059,
+      "applicant_share": 0.2123311057997171,
+      "observed_default_rate": 0.11126426219465503
+    },
+    {
+      "band": "High",
+      "count": 8320,
+      "applicant_share": 0.13527795392094694,
+      "observed_default_rate": 0.26766826923076925
+    }
+  ]
+}

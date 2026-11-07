@@ -19,4 +19,5 @@ alembic==1.17.2
 kaggle==2.2.5
 optuna==4.6.0
 httpx==0.28.1
+httpx2==2.16.0
 imbalanced-learn==0.14.2
