@@ -5,6 +5,15 @@ from pathlib import Path
 import pandas as pd
 
 
+def indexed_by_customer(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.reset_index() if frame.index.name == "SK_ID_CURR" else frame.copy()
+    if "SK_ID_CURR" in result.columns:
+        result = result.set_index("SK_ID_CURR")
+    if result.index.name != "SK_ID_CURR":
+        raise ValueError("Aggregator output must be indexed by SK_ID_CURR")
+    return result.loc[:, ~result.columns.duplicated()].sort_index()
+
+
 def float32_columns(
     path: Path,
     required: set[str] | None = None,
@@ -32,6 +41,7 @@ def bureau_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"BUREAU_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result = indexed_by_customer(result)
     result["BUREAU_ROW_COUNT"] = (
         frame.groupby("SK_ID_CURR")["SK_ID_BUREAU"].nunique()
         if "SK_ID_BUREAU" in frame
@@ -40,7 +50,6 @@ def bureau_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     active = frame[frame.get("CREDIT_ACTIVE").eq("Active")] if "CREDIT_ACTIVE" in frame else frame.iloc[0:0]
     if not active.empty and {"AMT_CREDIT_SUM_DEBT", "AMT_CREDIT_SUM"}.issubset(active):
         active_totals = active.groupby("SK_ID_CURR")[["AMT_CREDIT_SUM_DEBT", "AMT_CREDIT_SUM"]].sum()
-        result = result.set_index("SK_ID_CURR")
         result["BUREAU_ACTIVE_DEBT_CREDIT_RATIO"] = (
             active_totals["AMT_CREDIT_SUM_DEBT"].div(active_totals["AMT_CREDIT_SUM"].replace(0, float("nan")))
         ).reindex(result.index)
@@ -48,7 +57,7 @@ def bureau_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
             result["BUREAU_ACTIVE_OVERDUE_MEAN"] = (
                 active.assign(overdue=active["CREDIT_DAY_OVERDUE"].fillna(0).gt(0)).groupby("SK_ID_CURR")["overdue"].mean()
             ).reindex(result.index)
-    return result.reset_index()
+    return indexed_by_customer(result)
 
 
 def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -57,6 +66,7 @@ def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"PREV_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result = indexed_by_customer(result)
     result["PREV_ROW_COUNT"] = (
         frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
         if "SK_ID_PREV" in frame
@@ -84,7 +94,7 @@ def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
                     subset.groupby("SK_ID_CURR")["AMT_CREDIT"].mean().reindex(result.index)
                 )
     result = result.reset_index()
-    return result
+    return indexed_by_customer(result)
 
 
 def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -93,6 +103,7 @@ def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"INSTALL_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result = indexed_by_customer(result)
     result[f"INSTALL_ROW_COUNT"] = frame.groupby("SK_ID_CURR").size()
     if {"DAYS_INSTALMENT", "DAYS_ENTRY_PAYMENT"}.issubset(frame):
         result["INSTALL_LATE_PAYMENT_RATE"] = (
@@ -108,7 +119,7 @@ def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
         result["INSTALL_DAYS_LATE_MEAN"] = timing.clip(lower=0).groupby(frame["SK_ID_CURR"]).mean().reindex(result.index)
         result["INSTALL_DAYS_EARLY_MEAN"] = timing.clip(upper=0).abs().groupby(frame["SK_ID_CURR"]).mean().reindex(result.index)
     result = result.reset_index()
-    return result
+    return indexed_by_customer(result)
 
 
 def pos_cash_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -117,6 +128,7 @@ def pos_cash_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"POS_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result = indexed_by_customer(result)
     result["POS_ROW_COUNT"] = (
         frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
         if "SK_ID_PREV" in frame
@@ -125,7 +137,7 @@ def pos_cash_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     for column in ("SK_DPD", "SK_DPD_DEF"):
         if column in frame:
             result[f"POS_{column}_LATE_RATE"] = frame[column].gt(0).groupby(frame["SK_ID_CURR"]).mean()
-    return result.reset_index()
+    return indexed_by_customer(result)
 
 
 def credit_card_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -134,6 +146,7 @@ def credit_card_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"CREDIT_CARD_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
+    result = indexed_by_customer(result)
     result["CREDIT_CARD_ROW_COUNT"] = (
         frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
         if "SK_ID_PREV" in frame
@@ -145,10 +158,14 @@ def credit_card_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
     for column in ("SK_DPD", "SK_DPD_DEF"):
         if column in frame:
             result[f"CREDIT_CARD_{column}_LATE_RATE"] = frame[column].gt(0).groupby(frame["SK_ID_CURR"]).mean()
-    return result.reset_index()
+    return indexed_by_customer(result)
 
 
-def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed") -> None:
+def main(
+    data_dir: str | Path = "data",
+    output_dir: str | Path = "data/processed",
+    nrows: int | None = None,
+) -> None:
     data = Path(data_dir)
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -178,6 +195,7 @@ def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed
                 path,
                 usecols=columns,
                 dtype={column: "float32" for column in columns if column != "SK_ID_CURR"},
+                nrows=nrows,
             )
         else:
             count_id = (
@@ -190,9 +208,9 @@ def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed
                 required={"SK_ID_CURR", count_id},
                 excluded={"SK_ID_CURR", "SK_ID_BUREAU", "SK_ID_PREV", "NAME_CONTRACT_STATUS"},
             )
-            frame = pd.read_csv(path, usecols=columns, dtype=dtype)
+            frame = pd.read_csv(path, usecols=columns, dtype=dtype, nrows=nrows)
         aggregated = aggregate(frame)
-        aggregated.to_parquet(output / target, index=False)
+        aggregated.reset_index().to_parquet(output / target, index=False)
         elapsed = time.perf_counter() - stage_start
         print(
             f"{filename}: {elapsed:.2f}s, shape={aggregated.shape}, "
@@ -204,5 +222,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--output-dir", default="data/processed")
+    parser.add_argument("--nrows", type=int, default=None, help="Read only this many rows per source table")
     args = parser.parse_args()
-    main(args.data_dir, args.output_dir)
+    main(args.data_dir, args.output_dir, args.nrows)

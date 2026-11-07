@@ -139,8 +139,9 @@ def test_external_aggregates(tmp_path):
         "DAYS_ENTRY_PAYMENT": [11, 19],
     })
 
-    assert "BUREAU_AMT_CREDIT_SUM_MEAN_AGG" in bureau_aggregates(bureau).columns
-    assert "BUREAU_ROW_COUNT" in bureau_aggregates(bureau).columns
+    bureau_result = bureau_aggregates(bureau)
+    assert "BUREAU_AMT_CREDIT_SUM_MEAN_AGG" in bureau_result.columns
+    assert "BUREAU_ROW_COUNT" in bureau_result.columns
     assert "SUM_AGG" not in bureau_aggregates(bureau).columns
     assert previous_application_aggregates(previous)["PREV_APPROVED_SHARE"].iloc[0] == 0.5
     assert installment_aggregates(installments)["INSTALL_LATE_PAYMENT_RATE"].iloc[0] == 0.5
@@ -182,7 +183,6 @@ def test_external_aggregates_real_table_shapes():
     previous_result = previous_application_aggregates(previous)
     installment_result = installment_aggregates(installments)
 
-    assert "SK_ID_CURR" in bureau_result.columns
     assert "SK_ID_BUREAU" not in "".join(bureau_result.columns)
     assert previous_result["PREV_ROW_COUNT"].tolist() == [2, 1]
     assert "SK_ID_PREV" not in "".join(previous_result.columns)
@@ -215,9 +215,82 @@ def test_balance_external_aggregates():
     card_result = credit_card_aggregates(credit_card)
 
     assert "POS_SK_DPD_LATE_RATE" in pos_result
-    assert pos_result.loc[pos_result["SK_ID_CURR"] == 1, "POS_SK_DPD_LATE_RATE"].iloc[0] == 0.5
+    assert pos_result.loc[1, "POS_SK_DPD_LATE_RATE"] == 0.5
     assert "CREDIT_CARD_UTILISATION_MEAN" in card_result
-    assert card_result.loc[card_result["SK_ID_CURR"] == 1, "CREDIT_CARD_UTILISATION_MEAN"].iloc[0] == pytest.approx(0.375)
+    assert card_result.loc[1, "CREDIT_CARD_UTILISATION_MEAN"] == pytest.approx(0.375)
+
+
+@pytest.mark.parametrize(
+    ("aggregator_name", "frame", "expected_column"),
+    [
+        (
+            "bureau_aggregates",
+            lambda: pd.DataFrame({
+                "SK_ID_CURR": [1, 1],
+                "SK_ID_BUREAU": [10, 11],
+                "CREDIT_ACTIVE": ["Active", "Closed"],
+                "AMT_CREDIT_SUM": [100.0, 200.0],
+                "AMT_CREDIT_SUM_DEBT": [20.0, 0.0],
+                "TARGET": [0, 1],
+            }),
+            "BUREAU_ACTIVE_DEBT_CREDIT_RATIO",
+        ),
+        (
+            "previous_application_aggregates",
+            lambda: pd.DataFrame({
+                "SK_ID_CURR": [1, 1],
+                "SK_ID_PREV": [20, 21],
+                "AMT_APPLICATION": [100.0, 200.0],
+                "AMT_CREDIT": [90.0, 180.0],
+                "NAME_CONTRACT_STATUS": ["Approved", "Refused"],
+                "TARGET": [0, 1],
+            }),
+            "PREV_APPLICATION_CREDIT_RATIO",
+        ),
+        (
+            "installment_aggregates",
+            lambda: pd.DataFrame({
+                "SK_ID_CURR": [1, 1],
+                "SK_ID_PREV": [20, 20],
+                "AMT_INSTALMENT": [100.0, 100.0],
+                "AMT_PAYMENT": [100.0, 90.0],
+                "DAYS_INSTALMENT": [10, 20],
+                "DAYS_ENTRY_PAYMENT": [12, 18],
+                "TARGET": [0, 1],
+            }),
+            "INSTALL_PAYMENT_RATIO_MEAN",
+        ),
+        (
+            "pos_cash_aggregates",
+            lambda: pd.DataFrame({
+                "SK_ID_CURR": [1, 1],
+                "SK_ID_PREV": [20, 20],
+                "SK_DPD": [0, 2],
+                "TARGET": [0, 1],
+            }),
+            "POS_SK_DPD_LATE_RATE",
+        ),
+        (
+            "credit_card_aggregates",
+            lambda: pd.DataFrame({
+                "SK_ID_CURR": [1, 1],
+                "SK_ID_PREV": [20, 20],
+                "AMT_BALANCE": [50.0, 25.0],
+                "AMT_CREDIT_LIMIT_ACTUAL": [100.0, 100.0],
+                "TARGET": [0, 1],
+            }),
+            "CREDIT_CARD_UTILISATION_MEAN",
+        ),
+    ],
+)
+def test_aggregator_customer_index_contract(aggregator_name, frame, expected_column):
+    import scripts.aggregate_external_data as aggregation
+
+    result = getattr(aggregation, aggregator_name)(frame())
+    assert result.index.name == "SK_ID_CURR"
+    assert result.index.is_unique
+    assert "TARGET" not in result.columns
+    assert expected_column in result.columns
 
 
 def test_data_run_smoke(tmp_path, monkeypatch):
