@@ -1,6 +1,7 @@
 import json
 import argparse
 import time
+import hashlib
 from pathlib import Path
 
 import joblib
@@ -47,6 +48,60 @@ def select_top_features(train_x, train_y, test_x, top_features=150):
 import lightgbm as lgb
 
 
+BASELINE_CACHE = Path("data/processed/baselines.parquet")
+BASELINE_MODELS_CACHE = Path("data/processed/baselines.joblib")
+
+
+def train_data_fingerprint(train_path, no_scale_pos_weight):
+    digest = hashlib.sha256()
+    with Path(train_path).open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest.update(b"scale_pos_weight_enabled" if not no_scale_pos_weight else b"scale_pos_weight_disabled")
+    return digest.hexdigest()
+
+
+def save_baseline_cache(train_fingerprint, results, oof_probabilities, test_probabilities, models):
+    rows = []
+    for name in results:
+        for kind, probabilities in (
+            ("oof", oof_probabilities[name]),
+            ("test", test_probabilities[name]),
+        ):
+            for row, probability in enumerate(probabilities):
+                rows.append({
+                    "train_fingerprint": train_fingerprint,
+                    "model": name,
+                    "kind": kind,
+                    "row": row,
+                    "probability": float(probability),
+                    **results[name],
+                })
+    BASELINE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_parquet(BASELINE_CACHE, index=False)
+    joblib.dump(models, BASELINE_MODELS_CACHE)
+
+
+def load_baseline_cache(train_fingerprint):
+    if not BASELINE_CACHE.exists() or not BASELINE_MODELS_CACHE.exists():
+        return None
+    cache = pd.read_parquet(BASELINE_CACHE)
+    if cache.empty or cache["train_fingerprint"].unique().tolist() != [train_fingerprint]:
+        return None
+    oof_probabilities = {}
+    test_probabilities = {}
+    results = {}
+    for name, group in cache.groupby("model"):
+        oof_probabilities[name] = group[group["kind"] == "oof"].sort_values("row")["probability"].to_numpy()
+        test_probabilities[name] = group[group["kind"] == "test"].sort_values("row")["probability"].to_numpy()
+        first = group.iloc[0]
+        metric_columns = [column for column in cache.columns if column not in {
+            "train_fingerprint", "model", "kind", "row", "probability",
+        }]
+        results[name] = {column: float(first[column]) for column in metric_columns}
+    return results, oof_probabilities, test_probabilities, joblib.load(BASELINE_MODELS_CACHE)
+
+
 def evaluate(y_true, probability, threshold=None):
     result = {
         "auc_roc": roc_auc_score(y_true, probability),
@@ -85,6 +140,7 @@ def main(
     fast=False,
     top_features=150,
     no_scale_pos_weight=False,
+    reuse_baselines=False,
 ):
     if top_features is not None and top_features < 1:
         raise ValueError("top_features must be positive or None")
@@ -113,12 +169,22 @@ def main(
     results = {}
     oof_probabilities = {}
     test_probabilities = {}
+    cached_models = None
+    if reuse_baselines:
+        fingerprint = train_data_fingerprint(train_path, no_scale_pos_weight)
+        cached = load_baseline_cache(fingerprint)
+        if cached is not None:
+            results, oof_probabilities, test_probabilities, cached_models = cached
+            print("Baseline cache: reused")
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("loan-default-model-v1")
 
     tuned = {}
     stage_start = time.perf_counter()
+    baseline_models = {} if cached_models is None else cached_models
     for name, model in models.items():
+        if cached_models is not None:
+            continue
         with mlflow.start_run(run_name=f"baseline_{name}"):
             oof_probability = cross_val_predict(
                 model, train_x, train_y, cv=cv, method="predict_proba", n_jobs=-1
@@ -130,6 +196,7 @@ def main(
             probability = model.predict_proba(test_x)[:, 1]
             oof_probabilities[name] = oof_probability
             test_probabilities[name] = probability
+            baseline_models[name] = model
             threshold = metrics_at_threshold(train_y, oof_probability)["threshold"]
             results[name] = evaluate(test_y, probability, threshold)
             results[name]["cv_auc_roc"] = cv_auc
@@ -139,6 +206,14 @@ def main(
                 mlflow.log_metric(f"test_{metric}", float(value))
             mlflow.sklearn.log_model(model, name=name, serialization_format="cloudpickle")
     print(f"Baseline models: {time.perf_counter() - stage_start:.2f}s")
+    if cached_models is None and reuse_baselines:
+        save_baseline_cache(
+            train_data_fingerprint(train_path, no_scale_pos_weight),
+            results,
+            oof_probabilities,
+            test_probabilities,
+            baseline_models,
+        )
 
     if optuna_available:
         candidates = {}
@@ -200,7 +275,7 @@ def main(
         results["blend_mean"]["cv_auc_roc"] = roc_auc_score(train_y, blend_oof)
         results["blend_mean"].update(metrics_at_recall(train_y, blend_oof))
 
-    all_models = {**models, **tuned}
+    all_models = {**baseline_models, **tuned}
     best_name = max(results, key=lambda name: results[name]["cv_auc_roc"])
     if best_name == "blend_mean":
         best_model = None
@@ -262,10 +337,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable scale_pos_weight for XGBoost and LightGBM",
     )
+    parser.add_argument(
+        "--reuse-baselines",
+        action="store_true",
+        help="Reuse baseline predictions and models when the training data fingerprint matches",
+    )
     args = parser.parse_args()
     main(
         trials=args.trials,
         fast=args.fast,
         top_features=args.top_features,
         no_scale_pos_weight=args.no_scale_pos_weight,
+        reuse_baselines=args.reuse_baselines,
     )

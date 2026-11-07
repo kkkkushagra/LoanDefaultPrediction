@@ -156,7 +156,7 @@ def tune_xgb(train_x, train_y, trials, cv, fast=False, scale_pos_weight=None):
         "min_child_weight": 1,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "reg_alpha": 0.0,
+        "reg_alpha": 1e-8,
         "reg_lambda": 1.0,
     }
 
@@ -195,9 +195,10 @@ def tune_xgb(train_x, train_y, trials, cv, fast=False, scale_pos_weight=None):
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
     )
-    study.enqueue_trial(default_params | {
-        "scale_pos_weight": default_scale_pos_weight,
-    })
+    baseline_trial = default_params.copy()
+    if scale_pos_weight is not None:
+        baseline_trial["scale_pos_weight"] = default_scale_pos_weight
+    study.enqueue_trial(baseline_trial)
     study.optimize(objective, n_trials=max(1, trials), show_progress_bar=False)
     params = study.best_params.copy()
     params.update(
@@ -222,8 +223,8 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False, scale_pos_weight=Non
         "min_child_samples": 20,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "reg_alpha": 0.0,
-        "reg_lambda": 0.0,
+        "reg_alpha": 1e-8,
+        "reg_lambda": 1e-8,
     }
 
     def objective(trial):
@@ -266,9 +267,10 @@ def tune_lightgbm(train_x, train_y, trials, cv, fast=False, scale_pos_weight=Non
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
     )
-    study.enqueue_trial(default_params | {
-        "scale_pos_weight": default_scale_pos_weight,
-    })
+    baseline_trial = default_params.copy()
+    if scale_pos_weight is not None:
+        baseline_trial["scale_pos_weight"] = default_scale_pos_weight
+    study.enqueue_trial(baseline_trial)
     study.optimize(objective, n_trials=max(1, trials), show_progress_bar=False)
     params = study.best_params.copy()
     params.update(

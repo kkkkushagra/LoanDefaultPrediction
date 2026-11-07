@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import StratifiedKFold
 
 from src.models.training import load_model_features
 
@@ -55,6 +56,31 @@ def test_top_feature_selection_fits_on_train_only(monkeypatch):
     assert fitted == {"columns": ["useful", "unused"], "rows": 3}
     assert selected_train.columns.tolist() == ["useful"]
     assert selected_test.columns.tolist() == ["useful"]
+
+
+def test_tuning_trials_return_fittable_models():
+    from src.models.training import tune_lightgbm, tune_xgb
+
+    train_x = pd.DataFrame({
+        "feature_a": np.arange(60, dtype=float) % 7,
+        "feature_b": np.linspace(-2.0, 2.0, 60),
+        "feature_c": np.sin(np.arange(60)),
+    })
+    train_y = pd.Series([0, 1] * 30)
+    cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+
+    for tuner in (tune_xgb, tune_lightgbm):
+        model, _ = tuner(
+            train_x,
+            train_y,
+            trials=2,
+            cv=cv,
+            fast=True,
+            scale_pos_weight=None,
+        )
+        model.fit(train_x, train_y)
+        predictions = model.predict(train_x)
+        assert len(predictions) == len(train_x)
 
 
 def test_run_module_smoke(tmp_path, monkeypatch):
