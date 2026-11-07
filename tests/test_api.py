@@ -91,7 +91,7 @@ def test_higher_credit_simulation():
 
 
 def test_manual_calibration_matches_wrapper_on_test_rows():
-    import joblib
+    import xgboost as xgb
 
     from backend.service import ScoringService
     from src.models.training import load_model_features
@@ -99,6 +99,21 @@ def test_manual_calibration_matches_wrapper_on_test_rows():
     service = ScoringService()
     test = pd.read_parquet("data/processed/test.parquet").drop(columns=["TARGET"], errors="ignore").iloc[:20]
     matrix = load_model_features(test).reindex(columns=service.model_feature_names).fillna(0.0)
-    direct = service.calibrated_model.predict_proba(matrix)[:, 1]
-    manual = service.predict_calibrated(service._to_model_frame(matrix))
-    assert np.max(np.abs(direct - manual)) <= 1e-6
+    frame = service._to_model_frame(matrix)
+    manual = service.predict_calibrated(frame)
+
+    # xgboost 3.1 cannot read column names from pandas 3 DataFrames, so the sklearn wrapper
+    # cannot be called directly. Verify against the booster + stored calibrator instead.
+    booster = service.xgb_model.get_booster()
+    dmatrix = xgb.DMatrix(frame.to_numpy(dtype=float), feature_names=service.model_feature_names)
+    raw = booster.predict(dmatrix)
+    contributions = booster.predict(dmatrix, pred_contribs=True)
+    assert np.allclose(1.0 / (1.0 + np.exp(-contributions.sum(axis=1))), raw, atol=1e-4)
+
+    calibrator = service.calibrated_model.calibrated_classifiers_[0].calibrators[0]
+    if hasattr(calibrator, "predict_proba"):
+        expected = calibrator.predict_proba(raw.reshape(-1, 1))[:, 1]
+    else:
+        expected = np.asarray(calibrator.predict(raw))
+    assert np.max(np.abs(expected - manual)) <= 1e-6
+    assert ((manual >= 0.0) & (manual <= 1.0)).all()

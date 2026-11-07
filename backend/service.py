@@ -4,6 +4,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from src.models.explain import explain_applicant
 from src.models.training import load_model_features
 
@@ -60,7 +61,11 @@ class ScoringService:
         return frame.reindex(columns=self.model_feature_names).astype(float)
 
     def predict_calibrated(self, matrix: pd.DataFrame) -> np.ndarray:
-        raw_probability = self.xgb_model.predict_proba(matrix)[:, 1]
+        # xgboost 3.1.x cannot read column names from pandas 3 DataFrames, so build the
+        # DMatrix explicitly with the booster's own feature names.
+        frame = self._to_model_frame(matrix)
+        dmatrix = xgb.DMatrix(frame.to_numpy(dtype=float), feature_names=self.model_feature_names)
+        raw_probability = self.xgb_model.get_booster().predict(dmatrix)
         fitted = self.calibrated_model.calibrated_classifiers_[0]
         calibrator = fitted.calibrators[0]
         if hasattr(calibrator, "predict_proba"):
