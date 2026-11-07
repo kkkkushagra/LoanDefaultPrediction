@@ -1,38 +1,56 @@
 import argparse
+import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 
-def float32_columns(path: Path, excluded: set[str] | None = None) -> tuple[list[str], dict[str, str]]:
+def float32_columns(
+    path: Path,
+    required: set[str] | None = None,
+    excluded: set[str] | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    required = required or set()
     excluded = excluded or set()
     sample = pd.read_csv(path, nrows=100)
     columns = [
         column for column in sample.columns
-        if column not in excluded
+        if column in required or column not in excluded
     ]
     dtype = {
         column: "float32"
         for column in columns
+        if column not in excluded
         if pd.api.types.is_numeric_dtype(sample[column])
     }
     return columns, dtype
 
 
 def bureau_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
-    numeric = frame.select_dtypes(include="number").columns.difference(["SK_ID_CURR"])
+    numeric = frame.select_dtypes(include="number").columns.difference(
+        ["SK_ID_CURR", "SK_ID_BUREAU", "SK_ID_PREV"]
+    )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"BUREAU_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
-    result[f"BUREAU_ROW_COUNT"] = frame.groupby("SK_ID_CURR").size()
+    result["BUREAU_ROW_COUNT"] = (
+        frame.groupby("SK_ID_CURR")["SK_ID_BUREAU"].nunique()
+        if "SK_ID_BUREAU" in frame
+        else frame.groupby("SK_ID_CURR").size()
+    )
     return result.reset_index()
 
 
 def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
-    numeric = frame.select_dtypes(include="number").columns.difference(["SK_ID_CURR"])
+    numeric = frame.select_dtypes(include="number").columns.difference(
+        ["SK_ID_CURR", "SK_ID_BUREAU", "SK_ID_PREV"]
+    )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"PREV_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
-    result[f"PREV_ROW_COUNT"] = frame.groupby("SK_ID_CURR").size()
+    result["PREV_ROW_COUNT"] = (
+        frame.groupby("SK_ID_CURR")["SK_ID_PREV"].nunique()
+        if "SK_ID_PREV" in frame
+        else frame.groupby("SK_ID_CURR").size()
+    )
     if "NAME_CONTRACT_STATUS" in frame:
         status = pd.crosstab(frame["SK_ID_CURR"], frame["NAME_CONTRACT_STATUS"], normalize="index")
         for status_name in ("Approved", "Refused"):
@@ -42,7 +60,9 @@ def previous_application_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def installment_aggregates(frame: pd.DataFrame) -> pd.DataFrame:
-    numeric = frame.select_dtypes(include="number").columns.difference(["SK_ID_CURR"])
+    numeric = frame.select_dtypes(include="number").columns.difference(
+        ["SK_ID_CURR", "SK_ID_BUREAU", "SK_ID_PREV"]
+    )
     result = frame.groupby("SK_ID_CURR")[numeric].agg(["mean", "max", "min"])
     result.columns = [f"INSTALL_{column}_{stat.upper()}_AGG" for column, stat in result.columns]
     result[f"INSTALL_ROW_COUNT"] = frame.groupby("SK_ID_CURR").size()
@@ -66,9 +86,9 @@ def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed
         path = data / filename
         if not path.exists():
             continue
+        stage_start = time.perf_counter()
         if filename == "installments_payments.csv":
             columns = [
-                "SK_ID_PREV",
                 "SK_ID_CURR",
                 "NUM_INSTALMENT_VERSION",
                 "NUM_INSTALMENT_NUMBER",
@@ -83,9 +103,24 @@ def main(data_dir: str | Path = "data", output_dir: str | Path = "data/processed
                 dtype={column: "float32" for column in columns if column != "SK_ID_CURR"},
             )
         else:
-            columns, dtype = float32_columns(path, {"SK_ID_CURR", "NAME_CONTRACT_STATUS"})
+            count_id = (
+                "SK_ID_BUREAU"
+                if filename == "bureau.csv"
+                else "SK_ID_PREV"
+            )
+            columns, dtype = float32_columns(
+                path,
+                required={"SK_ID_CURR", count_id},
+                excluded={"SK_ID_CURR", "SK_ID_BUREAU", "SK_ID_PREV", "NAME_CONTRACT_STATUS"},
+            )
             frame = pd.read_csv(path, usecols=columns, dtype=dtype)
-        aggregate(frame).to_parquet(output / target, index=False)
+        aggregated = aggregate(frame)
+        aggregated.to_parquet(output / target, index=False)
+        elapsed = time.perf_counter() - stage_start
+        print(
+            f"{filename}: {elapsed:.2f}s, shape={aggregated.shape}, "
+            f"columns={aggregated.shape[1]}"
+        )
 
 
 if __name__ == "__main__":

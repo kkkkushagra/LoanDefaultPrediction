@@ -146,6 +146,49 @@ def test_external_aggregates(tmp_path):
     assert installment_aggregates(installments)["INSTALL_LATE_PAYMENT_RATE"].iloc[0] == 0.5
 
 
+def test_external_aggregates_real_table_shapes():
+    from scripts.aggregate_external_data import (
+        bureau_aggregates,
+        installment_aggregates,
+        previous_application_aggregates,
+    )
+
+    bureau = pd.DataFrame({
+        "SK_ID_CURR": [100001, 100001, 100002],
+        "SK_ID_BUREAU": [5001, 5002, 5003],
+        "DAYS_CREDIT": [-100, -200, -50],
+        "AMT_CREDIT_SUM": [1000.0, 2000.0, 3000.0],
+        "AMT_CREDIT_SUM_DEBT": [100.0, 200.0, 300.0],
+    })
+    previous = pd.DataFrame({
+        "SK_ID_PREV": [2001, 2002, 2003],
+        "SK_ID_CURR": [100001, 100001, 100002],
+        "NAME_CONTRACT_STATUS": ["Approved", "Refused", "Approved"],
+        "AMT_APPLICATION": [1000.0, 2000.0, 3000.0],
+        "AMT_CREDIT": [900.0, 1900.0, 2900.0],
+    })
+    installments = pd.DataFrame({
+        "SK_ID_PREV": [2001, 2001, 2002],
+        "SK_ID_CURR": [100001, 100001, 100002],
+        "NUM_INSTALMENT_VERSION": [1.0, 1.0, 2.0],
+        "NUM_INSTALMENT_NUMBER": [1.0, 2.0, 1.0],
+        "DAYS_INSTALMENT": [-30.0, -10.0, -20.0],
+        "DAYS_ENTRY_PAYMENT": [-29.0, -12.0, -20.0],
+        "AMT_INSTALMENT": [500.0, 500.0, 750.0],
+        "AMT_PAYMENT": [500.0, 490.0, 750.0],
+    })
+
+    bureau_result = bureau_aggregates(bureau)
+    previous_result = previous_application_aggregates(previous)
+    installment_result = installment_aggregates(installments)
+
+    assert "SK_ID_CURR" in bureau_result.columns
+    assert "SK_ID_BUREAU" not in "".join(bureau_result.columns)
+    assert previous_result["PREV_ROW_COUNT"].tolist() == [2, 1]
+    assert "SK_ID_PREV" not in "".join(previous_result.columns)
+    assert "INSTALL_LATE_PAYMENT_RATE" in installment_result
+
+
 def test_data_run_smoke(tmp_path, monkeypatch):
     from src.data.run import main
 
