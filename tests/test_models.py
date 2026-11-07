@@ -130,3 +130,36 @@ def test_run_module_command_line_entrypoint(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["src/models/run.py", "--trials", "0"])
 
     runpy.run_module("src.models.run", run_name="__main__")
+
+
+def test_calibration_utilities_keep_probabilities_bounded_and_costs_ordered():
+    from src.models.calibration import (
+        assign_risk_bands,
+        cost_threshold,
+        expected_calibration_error,
+        expected_cost,
+        risk_thresholds,
+    )
+
+    probabilities = np.array([0.05, 0.15, 0.35, 0.55, 0.75, 0.95])
+    target = np.array([0, 0, 0, 1, 1, 1])
+    assert np.all((probabilities >= 0) & (probabilities <= 1))
+    assert expected_calibration_error(target, probabilities) >= 0
+    bands = assign_risk_bands(probabilities, 0.30, 0.65)
+    assert bands.tolist() == [0, 0, 1, 1, 2, 2]
+    lower, upper = risk_thresholds(
+        np.array([0, 0, 0, 1, 1, 1]),
+        probabilities,
+    )
+    test_bands = assign_risk_bands(probabilities, lower, upper)
+    rates = [
+        target[test_bands == band].mean()
+        for band in range(3)
+        if np.any(test_bands == band)
+    ]
+    assert rates == sorted(rates)
+    threshold = cost_threshold(target, probabilities, cost_fn=5.0, cost_fp=1.0)
+    assert 0 <= threshold <= 1
+    assert expected_cost(target, probabilities, threshold, 5.0, 1.0) <= expected_cost(
+        target, probabilities, 0.5, 5.0, 1.0
+    )
