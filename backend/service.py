@@ -74,8 +74,8 @@ class ScoringService:
             calibrated = np.asarray(calibrator.predict(raw_probability))
         return calibrated
 
-    def transform(self, payload: dict) -> pd.DataFrame:
-        frame = pd.DataFrame([payload])
+    def transform(self, payload: dict | pd.DataFrame) -> pd.DataFrame:
+        frame = payload.copy() if isinstance(payload, pd.DataFrame) else pd.DataFrame([payload])
         missing_columns = {
             column: np.nan
             for column in self.preprocessor.input_columns_

@@ -1,0 +1,215 @@
+{
+  "fairness": {
+    "sample_size": 61503,
+    "positive_count": 4965,
+    "threshold": 0.24268546505138983,
+    "minimum_group_size": 100,
+    "gender": [
+      {
+        "group": "F",
+        "group_size": 40561,
+        "status": "ok",
+        "observed_default_rate": 0.06991938068588052,
+        "flag_rate": 0.02216414782673011,
+        "recall": 0.11071932299012693,
+        "false_positive_rate": 0.015506958250497018
+      },
+      {
+        "group": "M",
+        "group_size": 20940,
+        "status": "ok",
+        "observed_default_rate": 0.10167144221585482,
+        "flag_rate": 0.03132760267430754,
+        "recall": 0.1103804603100047,
+        "false_positive_rate": 0.022380522034979533
+      },
+      {
+        "group": "Missing / unknown",
+        "group_size": 0,
+        "status": "missing",
+        "observed_default_rate": null,
+        "flag_rate": null,
+        "recall": null,
+        "false_positive_rate": null
+      },
+      {
+        "group": "XNA",
+        "group_size": 2,
+        "status": "small",
+        "observed_default_rate": 0.0,
+        "flag_rate": 0.0,
+        "recall": null,
+        "false_positive_rate": 0.0
+      }
+    ],
+    "age": [
+      {
+        "group": "18-24",
+        "group_size": 2355,
+        "status": "ok",
+        "observed_default_rate": 0.11804670912951168,
+        "flag_rate": 0.038641188959660296,
+        "recall": 0.10071942446043165,
+        "false_positive_rate": 0.03033220991815118
+      },
+      {
+        "group": "25-34",
+        "group_size": 14304,
+        "status": "ok",
+        "observed_default_rate": 0.10549496644295302,
+        "flag_rate": 0.038730425055928414,
+        "recall": 0.13783962889330684,
+        "false_positive_rate": 0.027041813208284485
+      },
+      {
+        "group": "35-44",
+        "group_size": 16912,
+        "status": "ok",
+        "observed_default_rate": 0.08242667928098392,
+        "flag_rate": 0.026490066225165563,
+        "recall": 0.10975609756097561,
+        "false_positive_rate": 0.019010181724449026
+      },
+      {
+        "group": "45-54",
+        "group_size": 14041,
+        "status": "ok",
+        "observed_default_rate": 0.07392635852147283,
+        "flag_rate": 0.02457089950858201,
+        "recall": 0.11753371868978806,
+        "false_positive_rate": 0.01714988848727217
+      },
+      {
+        "group": "55-64",
+        "group_size": 12166,
+        "status": "ok",
+        "observed_default_rate": 0.05605786618444846,
+        "flag_rate": 0.009534769028439914,
+        "recall": 0.05571847507331378,
+        "false_positive_rate": 0.006792058516196447
+      },
+      {
+        "group": "65+",
+        "group_size": 1725,
+        "status": "ok",
+        "observed_default_rate": 0.03710144927536232,
+        "flag_rate": 0.0005797101449275362,
+        "recall": 0.0,
+        "false_positive_rate": 0.0006020469596628537
+      },
+      {
+        "group": "Under 18",
+        "group_size": 0,
+        "status": "missing",
+        "observed_default_rate": null,
+        "flag_rate": null,
+        "recall": null,
+        "false_positive_rate": null
+      },
+      {
+        "group": "Missing / unknown",
+        "group_size": 0,
+        "status": "missing",
+        "observed_default_rate": null,
+        "flag_rate": null,
+        "recall": null,
+        "false_positive_rate": null
+      }
+    ]
+  },
+  "psi": {
+    "reference": "D:\\LoanDefaultPrediction\\LoanDefaultPrediction\\data\\processed\\train.parquet",
+    "baseline_comparison": "D:\\LoanDefaultPrediction\\LoanDefaultPrediction\\data\\processed\\test.parquet",
+    "simulated_income_multiplier": 1.25,
+    "fields": [
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "AMT_CREDIT",
+        "psi": 0.00010931955085478392,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "AMT_INCOME_TOTAL",
+        "psi": 0.00022595853434246574,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "AMT_ANNUITY",
+        "psi": 0.0002493021136995697,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "AMT_GOODS_PRICE",
+        "psi": 0.00012317215616078323,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "DAYS_EMPLOYED",
+        "psi": 0.00016842454445504195,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "NAME_CONTRACT_TYPE",
+        "psi": 2.9135680245525234e-06,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Train vs held-out test baseline",
+        "field": "NAME_INCOME_TYPE",
+        "psi": 0.00031034148658549596,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "AMT_CREDIT",
+        "psi": 0.00010931955085478392,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "AMT_INCOME_TOTAL",
+        "psi": 0.7356125935652148,
+        "interpretation": "large change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "AMT_ANNUITY",
+        "psi": 0.0002493021136995697,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "AMT_GOODS_PRICE",
+        "psi": 0.00012317215616078323,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "DAYS_EMPLOYED",
+        "psi": 0.00016842454445504195,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "NAME_CONTRACT_TYPE",
+        "psi": 2.9135680245525234e-06,
+        "interpretation": "little change"
+      },
+      {
+        "snapshot": "Simulated test shift (+25% income)",
+        "field": "NAME_INCOME_TYPE",
+        "psi": 0.00031034148658549596,
+        "interpretation": "little change"
+      }
+    ],
+    "baseline_mean": 0.00016991885058895614,
+    "baseline_max": 0.00031034148658549596,
+    "simulated_mean": 0.10522515242642785,
+    "simulated_max": 0.7356125935652148
+  }
+}
