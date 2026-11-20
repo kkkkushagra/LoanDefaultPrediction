@@ -1,0 +1,48 @@
+{
+  "model": "models/model_v2.joblib",
+  "input_fields": [
+    "AMT_CREDIT",
+    "AMT_INCOME_TOTAL",
+    "AMT_ANNUITY",
+    "AMT_GOODS_PRICE",
+    "DAYS_EMPLOYED",
+    "NAME_CONTRACT_TYPE",
+    "NAME_INCOME_TYPE"
+  ],
+  "target_validation_recall": 0.7,
+  "threshold_selection": "closest achievable validation recall; highest cutoff breaks ties",
+  "validation": {
+    "split": "calibration validation fold reconstructed from train.parquet",
+    "random_state": 42,
+    "sample_size": 49202,
+    "positive_count": 3972,
+    "current_threshold": {
+      "threshold": 0.24268546505138983,
+      "recall": 0.09667673716012085,
+      "precision": 0.30427892234548337,
+      "flagged_count": 1262,
+      "flagged_share": 0.02564936384699809
+    },
+    "selected_threshold": 0.10325048863887787,
+    "selected_recall": 0.6981369587109768
+  },
+  "test": {
+    "split": "D:\\LoanDefaultPrediction\\LoanDefaultPrediction\\data\\processed\\test.parquet",
+    "sample_size": 61503,
+    "positive_count": 4965,
+    "current": {
+      "threshold": 0.24268546505138983,
+      "recall": 0.11278952668680765,
+      "precision": 0.343980343980344,
+      "flagged_count": 1628,
+      "flagged_share": 0.026470253483569905
+    },
+    "selected": {
+      "threshold": 0.10325048863887787,
+      "recall": 0.7023162134944613,
+      "precision": 0.14480295668784518,
+      "flagged_count": 24081,
+      "flagged_share": 0.3915418760060485
+    }
+  }
+}
