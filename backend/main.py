@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Literal
 
 import joblib
 import pandas as pd
@@ -19,10 +19,24 @@ preprocessor = joblib.load(ROOT / "data/processed/preprocessor.joblib")
 
 
 def field_type(column: str):
+    if column in {"NAME_CONTRACT_TYPE", "NAME_INCOME_TYPE"}:
+        category_index = preprocessor.categorical_columns_.index(column)
+        categories = tuple(str(value) for value in preprocessor.encoder_.categories_[category_index])
+        return Literal.__getitem__(categories)
     if column.startswith(("FLAG_", "REG_REGION", "REGION", "LIVE_REGION")):
         return float
     return float
 
+
+application_categories = {
+    column: [
+        str(value)
+        for value in preprocessor.encoder_.categories_[
+            preprocessor.categorical_columns_.index(column)
+        ]
+    ]
+    for column in ("NAME_CONTRACT_TYPE", "NAME_INCOME_TYPE")
+}
 
 application_fields = {
     column: (field_type(column) | None, Field(default=None))
@@ -39,7 +53,7 @@ RawApplication = create_model(
 
 class SimulateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    applicant: dict[str, Any]
+    applicant: RawApplication
     overrides: dict[str, float] = Field(default_factory=dict)
 
 
@@ -72,6 +86,11 @@ def model_info():
         "assumed_cost_warning": "ASSUMED placeholders, not real bank costs.",
         "calibration_report_available": bool(report),
     }
+
+
+@app.get("/application-options")
+def application_options():
+    return {"categories": application_categories}
 
 
 def decision_response(payload: dict):
@@ -117,7 +136,7 @@ def simulate(payload: SimulateRequest):
     unknown = set(payload.overrides) - allowed
     if unknown:
         raise HTTPException(status_code=400, detail=f"Unsupported overrides: {sorted(unknown)}")
-    base = dict(payload.applicant)
+    base = payload.applicant.model_dump(exclude_none=True)
     response = decision_response(base)
     overridden = dict(base)
     overridden.update(payload.overrides)

@@ -207,9 +207,17 @@ py -m uvicorn backend.main:app --reload
 
 ```powershell
 curl http://localhost:8000/health
-curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000}"
-curl -X POST http://localhost:8000/explain -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000}"
+curl http://localhost:8000/application-options
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000,\"AMT_GOODS_PRICE\":350000,\"DAYS_EMPLOYED\":-3653,\"NAME_CONTRACT_TYPE\":\"Cash loans\",\"NAME_INCOME_TYPE\":\"Working\"}"
+curl -X POST http://localhost:8000/explain -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000,\"AMT_GOODS_PRICE\":350000,\"DAYS_EMPLOYED\":-3653,\"NAME_CONTRACT_TYPE\":\"Cash loans\",\"NAME_INCOME_TYPE\":\"Working\"}"
 ```
+
+`/application-options` returns the fitted encoder's accepted loan and income categories.
+The four added application fields are optional; blank values may be omitted, and the original
+three-field request remains supported. `DAYS_EMPLOYED` is elapsed days (negative for employed
+applicants); the dashboard accepts whole months and converts them before sending the request.
+`/simulate` accepts the same applicant object but only allows overrides for `AMT_CREDIT`,
+`AMT_INCOME_TOTAL`, and `AMT_ANNUITY`.
 
 ## Team
 

@@ -24,6 +24,63 @@ def test_valid_predict():
     assert len(body["top_reasons"]) <= 5
 
 
+def test_valid_seven_field_application():
+    with TestClient(app) as client:
+        response = client.post("/predict", json={
+            "AMT_CREDIT": 300000,
+            "AMT_INCOME_TOTAL": 100000,
+            "AMT_ANNUITY": 25000,
+            "AMT_GOODS_PRICE": 350000,
+            "DAYS_EMPLOYED": -3653,
+            "NAME_CONTRACT_TYPE": "Cash loans",
+            "NAME_INCOME_TYPE": "Working",
+        })
+    assert response.status_code == 200
+    assert 0 <= response.json()["calibrated_probability"] <= 1
+
+
+def test_application_options_match_openapi_categories():
+    with TestClient(app) as client:
+        categories = client.get("/application-options").json()["categories"]
+        schema = client.get("/openapi.json").json()["components"]["schemas"]["RawApplication"]["properties"]
+    assert categories["NAME_CONTRACT_TYPE"] == ["Cash loans", "Revolving loans"]
+    assert categories["NAME_INCOME_TYPE"] == [
+        "Businessman",
+        "Commercial associate",
+        "Maternity leave",
+        "Pensioner",
+        "State servant",
+        "Student",
+        "Unemployed",
+        "Working",
+    ]
+    for field, values in categories.items():
+        assert schema[field]["anyOf"][0]["enum"] == values
+
+
+def test_three_field_application_remains_supported():
+    with TestClient(app) as client:
+        response = client.post("/predict", json={
+            "AMT_CREDIT": 300000,
+            "AMT_INCOME_TOTAL": 100000,
+            "AMT_ANNUITY": 25000,
+        })
+    assert response.status_code == 200
+
+
+def test_invalid_category_is_rejected_by_all_scoring_endpoints():
+    applicant = {
+        "AMT_CREDIT": 300000,
+        "AMT_INCOME_TOTAL": 100000,
+        "AMT_ANNUITY": 25000,
+        "NAME_CONTRACT_TYPE": "Unknown loan",
+    }
+    with TestClient(app) as client:
+        assert client.post("/predict", json=applicant).status_code == 422
+        assert client.post("/explain", json=applicant).status_code == 422
+        assert client.post("/simulate", json={"applicant": applicant, "overrides": {}}).status_code == 422
+
+
 def test_invalid_predict_returns_422():
     with TestClient(app) as client:
         assert client.post("/predict", json={"AMT_CREDIT": "not-a-number"}).status_code == 422
@@ -88,6 +145,50 @@ def test_higher_credit_simulation():
         })
         assert response.status_code == 200
         assert response.json()["label"] == "hypothetical, not causal"
+
+
+def test_simulation_carries_optional_application_details_to_both_scores(monkeypatch):
+    from backend import main as api_module
+
+    calls = []
+
+    def fake_predict(payload):
+        calls.append(("predict", payload.copy()))
+        return 0.2
+
+    def fake_explain(payload):
+        calls.append(("explain", payload.copy()))
+        return {
+            "raising_risk": [],
+            "lowering_risk": [],
+            "association_note": "Model associations, not causes.",
+        }
+
+    monkeypatch.setattr(api_module.service, "predict", fake_predict)
+    monkeypatch.setattr(api_module.service, "explain", fake_explain)
+    applicant = {
+        "AMT_CREDIT": 300000,
+        "AMT_INCOME_TOTAL": 100000,
+        "AMT_ANNUITY": 25000,
+        "AMT_GOODS_PRICE": 350000,
+        "DAYS_EMPLOYED": 0,
+        "NAME_CONTRACT_TYPE": "Cash loans",
+        "NAME_INCOME_TYPE": "Working",
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/simulate", json={
+            "applicant": applicant,
+            "overrides": {"AMT_CREDIT": 400000},
+        })
+
+    assert response.status_code == 200
+    assert {kind for kind, _ in calls} == {"predict", "explain"}
+    for kind in ("predict", "explain"):
+        scored = [payload for call_kind, payload in calls if call_kind == kind]
+        assert len(scored) == 2
+        assert scored[0] == applicant
+        assert scored[1] == {**applicant, "AMT_CREDIT": 400000}
 
 
 def test_manual_calibration_matches_wrapper_on_test_rows():
