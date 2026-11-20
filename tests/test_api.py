@@ -122,6 +122,37 @@ def test_model_input_columns_match_training_feature_order():
     assert service.model_feature_names == list(service.xgb_model.get_booster().feature_names)
 
 
+def test_batch_transform_matches_single_applicant_transform():
+    from backend.service import ScoringService
+
+    service = ScoringService()
+    applicants = pd.DataFrame([
+        {
+            "SK_ID_CURR": 100002,
+            "AMT_CREDIT": 300000,
+            "AMT_INCOME_TOTAL": 100000,
+            "AMT_ANNUITY": 25000,
+            "AMT_GOODS_PRICE": 350000,
+            "DAYS_EMPLOYED": -3653,
+            "NAME_CONTRACT_TYPE": "Cash loans",
+            "NAME_INCOME_TYPE": "Working",
+        },
+        {
+            "SK_ID_CURR": 100003,
+            "AMT_CREDIT": 250000,
+            "AMT_INCOME_TOTAL": 90000,
+            "AMT_ANNUITY": 18000,
+            "AMT_GOODS_PRICE": 225000,
+            "DAYS_EMPLOYED": 0,
+            "NAME_CONTRACT_TYPE": "Revolving loans",
+            "NAME_INCOME_TYPE": "Pensioner",
+        },
+    ])
+    batched = service.transform(applicants)
+    single = service.transform(applicants.iloc[[0]].to_dict(orient="records")[0])
+    pd.testing.assert_frame_equal(batched.iloc[[0]].reset_index(drop=True), single)
+
+
 def test_explain_endpoint():
     with TestClient(app) as client:
         response = client.post("/explain", json={
