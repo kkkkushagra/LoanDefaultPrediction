@@ -58,6 +58,58 @@ def test_valid_seven_field_application():
     assert 0 <= response.json()["calibrated_probability"] <= 1
 
 
+def test_reason_provided_flags_distinguish_input_from_missing_history(monkeypatch):
+    from backend import service as service_module
+
+    applicant = {
+        "AMT_CREDIT": 300000,
+        "AMT_INCOME_TOTAL": 100000,
+        "AMT_ANNUITY": 25000,
+        "AMT_GOODS_PRICE": 350000,
+        "DAYS_EMPLOYED": -3653,
+        "NAME_CONTRACT_TYPE": "Cash loans",
+        "NAME_INCOME_TYPE": "Working",
+    }
+
+    def fake_explain_applicant(base_model, matrix, row, provided_features):
+        return {
+            "association_note": "Model associations, not causes.",
+            "raising_risk": [
+                {
+                    "feature": "Annuity To Credit",
+                    "shap_value": 0.2,
+                    "provided": provided_features["WOE_ANNUITY_TO_CREDIT"],
+                },
+                {
+                    "feature": "Ext Source Mean",
+                    "shap_value": 0.1,
+                    "provided": provided_features["WOE_EXT_SOURCE_MEAN"],
+                },
+            ],
+            "lowering_risk": [
+                {
+                    "feature": "Bureau Days Credit Max Agg",
+                    "shap_value": -0.1,
+                    "provided": provided_features["WOE_BUREAU_DAYS_CREDIT_MAX_AGG"],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(service_module, "explain_applicant", fake_explain_applicant)
+    with TestClient(app) as client:
+        prediction = client.post("/predict", json=applicant)
+        explanation = client.post("/explain", json=applicant)
+
+    assert prediction.status_code == explanation.status_code == 200
+    for response in (prediction.json(), explanation.json()):
+        reasons = {reason["feature"]: reason for reason in response["top_reasons"]}
+        assert reasons["Annuity To Credit"]["provided"] is True
+        assert reasons["Ext Source Mean"]["provided"] is False
+
+    lowering = {reason["feature"]: reason for reason in explanation.json()["lowering_risk"]}
+    assert lowering["Bureau Days Credit Max Agg"]["provided"] is False
+
+
 def test_application_options_match_openapi_categories():
     with TestClient(app) as client:
         categories = client.get("/application-options").json()["categories"]

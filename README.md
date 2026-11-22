@@ -10,10 +10,13 @@ a production credit-decision system.
 |---|---|---|
 | Data preprocessing and feature pipeline | Done | Source code and fitted transformers are included. Running the data pipeline still requires the source dataset. |
 | Model scoring API | Done | `/health`, `/predict`, `/explain`, `/simulate`, `/application-options`, `/model-info`, and `/portfolio/summary`. |
-| Web dashboard | Done | Application scoring, what-if comparisons, model information, and a portfolio summary view. |
+| Web dashboard | Done | Application scoring, what-if comparisons, model information, portfolio summary, and review-history views. |
+| Review audit trail | Prototype | Approve/refer/decline decisions and required reasons are stored in SQLite. No authentication or access control is implemented. |
+| Cost threshold analysis | Prototype | Interactive assumed-cost sliders use an aggregate curve derived only from stored calibration-validation predictions, quantized to 0.001. |
+| Applicant lookup | Prototype (local only) | `/lookup/{id}` scores and explains held-out rows only when local `data/processed/test.parquet` exists. Not included in Docker. |
 | Model explainability and threshold | Prototype | Model associations and a cost-based cutoff are exposed; they are not causal or validated operating policies. |
 | Portfolio reporting | Prototype | A static aggregate in `docs/portfolio_summary.json`; it is not refreshed from a live portfolio. |
-| Authentication, database, case management, and human review workflow | Not implemented | The API has no authentication or persistence, and it does not route cases to reviewers. |
+| Authentication, reviewer identity, and case routing | Not implemented | Review entries are unauthenticated prototype records and are not routed to officers. |
 | Early-warning alerts, production monitoring, and live credit-bureau integration | Not implemented | No live data feeds, alerting, or production drift monitoring are connected. |
 | Production readiness or regulatory certification | Not implemented | The model is not approved for real lending decisions. |
 
@@ -31,6 +34,9 @@ recall** and **34.40% precision**; it is not a 70%-recall operating point. See t
 [review-threshold evaluation](docs/review_threshold_evaluation.md). Costs are placeholders,
 not observed lender costs. The portfolio screen shows precomputed aggregate test results
 from `docs/portfolio_summary.json`; it does not read borrower-level test data at runtime.
+The Model tab's cost analysis uses only a precomputed, aggregated calibration-validation
+score curve (`docs/validation_threshold_curve.json`); score bins are 0.001 wide and no
+applicant identifiers are stored in that curve.
 
 Scores and explanations are decision-support demonstrations only. Model associations are
 not causes, and the threshold must not be interpreted as a recommendation to approve,
@@ -84,6 +90,9 @@ docker compose up --build
 The backend is available at `http://localhost:8000` and the dashboard at
 `http://localhost:8080`. Nginx serves the frontend and proxies `/api/` to the backend.
 The backend image runs as a non-root user and has a `/health` container health check.
+Review history is persisted in a Compose-managed SQLite volume. Applicant lookup is local
+demo-only and returns 404 in Docker because held-out parquet data is not copied or mounted
+into the image.
 
 ## Tests and CI
 
@@ -109,6 +118,15 @@ This writes borrower-level intermediate data under the ignored `data/` directory
 commit raw datasets, processed parquet files, or other borrower-level records. Only the
 fitted `preprocessor.joblib` and `feature_pipeline.joblib` are tracked for serving.
 Optional external-table aggregation scripts require their corresponding source files.
+The aggregate validation threshold curve can be regenerated without fitting a model:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.build_validation_threshold_curve
+```
+
+For the local-only lookup demo, keep the generated `data/processed/test.parquet` in place
+and request `/lookup/{SK_ID_CURR}`. This endpoint reads that held-out file locally and
+returns the saved model's probability and SHAP explanations.
 
 ## Repository map
 

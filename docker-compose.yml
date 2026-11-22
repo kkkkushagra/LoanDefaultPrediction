@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${API_PORT:-8000}:8000"
+    environment:
+      REVIEW_DB_PATH: /var/lib/app/reviews.sqlite3
+    volumes:
+      - review-data:/var/lib/app
     healthcheck:
       test:
         - CMD
@@ -25,3 +29,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  review-data:

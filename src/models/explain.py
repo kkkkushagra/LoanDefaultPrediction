@@ -31,22 +31,28 @@ def explain_applicant(
     matrix: pd.DataFrame,
     row: int = 0,
     top_n: int = 5,
+    provided_features: dict[str, bool] | None = None,
 ) -> dict:
     explainer = shap.TreeExplainer(base_model)
     contributions = prediction_shap_values(explainer, matrix, row)
     ranking = np.argsort(contributions)
     raising = ranking[-top_n:][::-1]
     lowering = ranking[:top_n]
+
+    def reason(index: int) -> dict:
+        column = matrix.columns[index]
+        result = {
+            "feature": human_feature_name(column),
+            "shap_value": float(contributions[index]),
+        }
+        if provided_features is not None:
+            result["provided"] = provided_features.get(column, False)
+        return result
+
     return {
         "association_note": "Model associations, not causes.",
-        "raising_risk": [
-            {"feature": human_feature_name(matrix.columns[index]), "shap_value": float(contributions[index])}
-            for index in raising
-        ],
-        "lowering_risk": [
-            {"feature": human_feature_name(matrix.columns[index]), "shap_value": float(contributions[index])}
-            for index in lowering
-        ],
+        "raising_risk": [reason(index) for index in raising],
+        "lowering_risk": [reason(index) for index in lowering],
     }
 
 

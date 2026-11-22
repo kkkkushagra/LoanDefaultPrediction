@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BarChart3, Boxes,
-  Calculator, ChevronRight, CircleHelp, FlaskConical, Gauge, Play,
+  Calculator, ChevronRight, CircleHelp, ClipboardList, FlaskConical, Gauge, Play,
 } from 'lucide-react'
 import { request } from './api'
 
@@ -31,6 +31,12 @@ const views = {
     title: 'Model information',
     description: 'Review the scoring model and the assumptions behind its threshold.',
     icon: Boxes,
+  },
+  reviews: {
+    label: 'Review history',
+    title: 'Review history',
+    description: 'Prototype decision log. This local demo has no authentication.',
+    icon: ClipboardList,
   },
 }
 
@@ -183,14 +189,22 @@ function ReasonList({ reasons, scale }) {
 
   return (
     <ul className="reasons">
-      {reasons.map(({ feature, shap_value }, index) => (
-        <li key={feature + index}>
+      {reasons.map(({ feature, shap_value, provided }, index) => (
+        <li
+          key={feature + index}
+          className={provided === false ? 'reason-unprovided' : ''}
+        >
           <div className="flex items-baseline justify-between gap-3">
             <span>{feature}</span>
             <span className={shap_value > 0 ? 'raising' : 'lowering'}>
               {shap_value > 0 ? '+' : ''}{shap_value.toFixed(3)}
             </span>
           </div>
+          {provided === false && (
+            <span className="reason-unprovided-label">
+              history not provided (treated as missing)
+            </span>
+          )}
           <div className="reason-track" aria-hidden="true">
             <span
               className={shap_value > 0 ? 'positive' : 'negative'}
@@ -204,6 +218,9 @@ function ReasonList({ reasons, scale }) {
 }
 
 function ScoreView({ values, update, categories, scoring, explanation, onSimulate }) {
+  const applicantRef = useRef(null)
+  const [reviewReason, setReviewReason] = useState('')
+  const review = useJob()
   const applicant = toPayload(values)
   const filled = Object.keys(applicant).length
   const busy = scoring.pending || explanation.pending
@@ -215,7 +232,26 @@ function ScoreView({ values, update, categories, scoring, explanation, onSimulat
     event.preventDefault()
     if (!filled || busy) return
     explanation.reset()
+    applicantRef.current = 'demo-' + crypto.randomUUID()
     scoring.run(() => request('/predict', applicant))
+  }
+
+  function submitReview(event) {
+    event.preventDefault()
+    const reason = reviewReason.trim()
+    const officerDecision = event.nativeEvent.submitter?.value
+    if (!reason || !officerDecision || !scoring.data || !applicantRef.current) return
+    review.run(async () => {
+      const saved = await request('/reviews', {
+        applicant_ref: applicantRef.current,
+        probability: scoring.data.calibrated_probability,
+        risk_band: scoring.data.risk_band,
+        officer_decision: officerDecision,
+        reason_text: reason,
+      })
+      setReviewReason('')
+      return saved
+    })
   }
 
   return (
@@ -264,7 +300,13 @@ function ScoreView({ values, update, categories, scoring, explanation, onSimulat
         {scoring.data && (
           <section className="panel">
             <div className="section-header">
-              <div><h2>Score drivers</h2><p>SHAP contributions to the underlying model score.</p></div>
+              <div>
+                <h2>Score drivers</h2>
+                <p>
+                  SHAP contributions to the model score. For 7-field inputs, reasons may
+                  reflect missing external history.
+                </p>
+              </div>
             </div>
             <h3 className="reason-heading"><ArrowUp size={15} aria-hidden="true" /> Raises score</h3>
             <ReasonList reasons={high} scale={scale} />
@@ -283,6 +325,37 @@ function ScoreView({ values, update, categories, scoring, explanation, onSimulat
               </button>
             )}
             <ErrorMessage error={explanation.error} />
+            <div className="review-actions">
+              <h3>Record officer decision <span className="prototype-label">Prototype · no auth</span></h3>
+              <form onSubmit={submitReview}>
+                <label className="field">
+                  <span className="field-label">Reason (required)</span>
+                  <textarea
+                    required
+                    maxLength={2000}
+                    rows={3}
+                    value={reviewReason}
+                    onChange={(event) => setReviewReason(event.target.value)}
+                    placeholder="Explain the decision"
+                  />
+                </label>
+                <div className="review-buttons">
+                  {['approve', 'refer', 'decline'].map((decision) => (
+                    <button
+                      className="button secondary"
+                      disabled={review.pending || !reviewReason.trim()}
+                      key={decision}
+                      type="submit"
+                      value={decision}
+                    >
+                      {decision[0].toUpperCase() + decision.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </form>
+              {review.data && <p className="success" role="status">Decision saved to the prototype audit log.</p>}
+              <ErrorMessage error={review.error} />
+            </div>
             <button className="text-button mt-4" onClick={onSimulate}>
               Compare a scenario <ArrowRight size={16} aria-hidden="true" />
             </button>
@@ -403,6 +476,93 @@ function ModelView({ info }) {
           View checked-in calibration report <ArrowRight size={16} aria-hidden="true" />
         </a>
       )}
+      <ThresholdAnalysis />
+    </section>
+  )
+}
+
+function ThresholdAnalysis() {
+  const [fnCost, setFnCost] = useState(5)
+  const [fpCost, setFpCost] = useState(1)
+  const analysis = useJob()
+
+  useEffect(() => {
+    const query = new URLSearchParams({ fn_cost: fnCost, fp_cost: fpCost })
+    const timer = setTimeout(() => {
+      analysis.run(() => request('/threshold-analysis?' + query.toString()))
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [fnCost, fpCost])
+
+  return (
+    <div className="threshold-analysis">
+      <div>
+        <h3>ASSUMED cost sensitivity</h3>
+        <p className="muted text-sm">
+          Recalculates against stored calibration-validation predictions only, in 0.001 score bins.
+        </p>
+      </div>
+      <label className="cost-slider">
+        <span>False-negative cost: ASSUMED {fnCost}</span>
+        <input
+          type="range"
+          min="0.1"
+          max="20"
+          step="0.1"
+          value={fnCost}
+          onChange={(event) => setFnCost(Number(event.target.value))}
+        />
+      </label>
+      <label className="cost-slider">
+        <span>False-positive cost: ASSUMED {fpCost}</span>
+        <input
+          type="range"
+          min="0.1"
+          max="20"
+          step="0.1"
+          value={fpCost}
+          onChange={(event) => setFpCost(Number(event.target.value))}
+        />
+      </label>
+      {analysis.error && <ErrorMessage error={analysis.error} />}
+      {analysis.pending && <p className="muted text-sm" role="status">Updating threshold…</p>}
+      {analysis.data && (
+        <dl className="threshold-results">
+          <div><dt>Threshold</dt><dd>{analysis.data.threshold.toFixed(3)}</dd></div>
+          <div><dt>Flagged</dt><dd>{analysis.data.flagged_percent.toFixed(2)}%</dd></div>
+          <div><dt>Validation recall</dt><dd>{percent(analysis.data.recall)}</dd></div>
+          <div><dt>Validation precision</dt><dd>{percent(analysis.data.precision)}</dd></div>
+        </dl>
+      )}
+    </div>
+  )
+}
+
+function ReviewHistory({ data }) {
+  return (
+    <section className="panel space-y-4">
+      <div>
+        <h2>Review history <span className="prototype-label">Prototype · no authentication</span></h2>
+        <p className="muted text-sm">Local SQLite audit log; decisions are not routed or access-controlled.</p>
+      </div>
+      {data.reviews.length === 0 ? (
+        <p className="muted text-sm">No decisions have been recorded.</p>
+      ) : (
+        <ul className="review-history">
+          {data.reviews.map((item) => (
+            <li key={item.id}>
+              <div className="review-history-heading">
+                <strong>{item.officer_decision}</strong>
+                <span>{new Date(item.created_at).toLocaleString()}</span>
+              </div>
+              <p>{item.reason_text}</p>
+              <span className="muted text-xs">
+                {item.applicant_ref} · {item.risk_band} · {percent(item.probability)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -501,6 +661,9 @@ export function App() {
         )}
         {view === 'model' && (
           <RemoteView path="/model-info">{(data) => <ModelView info={data} />}</RemoteView>
+        )}
+        {view === 'reviews' && (
+          <RemoteView path="/reviews">{(data) => <ReviewHistory data={data} />}</RemoteView>
         )}
       </main>
     </div>

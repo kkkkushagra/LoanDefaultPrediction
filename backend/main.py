@@ -1,18 +1,29 @@
 from datetime import datetime
+from contextlib import closing
+import json
+import os
 from pathlib import Path
+import sqlite3
 from typing import Literal
 
 import joblib
+import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, field_validator, create_model
 
 from .service import SENSITIVE_FIELDS, ScoringService
+from .thresholds import analyze_validation_curve
+from src.models.training import load_model_features
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROCESSED_DATA_DIR = ROOT / "data/processed"
+THRESHOLD_CURVE_PATH = ROOT / "docs/validation_threshold_curve.json"
+REVIEW_DB_PATH = Path(os.environ.get("REVIEW_DB_PATH", ROOT / "data/reviews.sqlite3"))
 
 service = ScoringService(ROOT)
 preprocessor = joblib.load(ROOT / "data/processed/preprocessor.joblib")
@@ -57,6 +68,24 @@ class SimulateRequest(BaseModel):
     overrides: dict[str, float] = Field(default_factory=dict)
 
 
+class ReviewCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    applicant_ref: str = Field(min_length=1, max_length=200)
+    probability: float = Field(ge=0, le=1)
+    risk_band: Literal["Low", "Medium", "High"]
+    officer_decision: Literal["approve", "refer", "decline"]
+    reason_text: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("applicant_ref", "reason_text")
+    @classmethod
+    def require_non_whitespace(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+
 app = FastAPI(title="Loan Default Calibration API")
 
 
@@ -67,7 +96,10 @@ def root():
 
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request, exception):
-    return JSONResponse(status_code=422, content={"detail": "Invalid input", "errors": exception.errors()})
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid input", "errors": jsonable_encoder(exception.errors())},
+    )
 
 
 @app.get("/health")
@@ -91,6 +123,121 @@ def model_info():
 @app.get("/application-options")
 def application_options():
     return {"categories": application_categories}
+
+
+def ensure_reviews_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            applicant_ref TEXT NOT NULL,
+            probability REAL NOT NULL,
+            risk_band TEXT NOT NULL CHECK (risk_band IN ('Low', 'Medium', 'High')),
+            officer_decision TEXT NOT NULL
+                CHECK (officer_decision IN ('approve', 'refer', 'decline')),
+            reason_text TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )
+        """
+    )
+
+
+@app.post("/reviews", status_code=201)
+def create_review(payload: ReviewCreate):
+    REVIEW_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(REVIEW_DB_PATH)) as connection:
+        ensure_reviews_table(connection)
+        cursor = connection.execute(
+            """
+            INSERT INTO reviews (
+                applicant_ref, probability, risk_band, officer_decision, reason_text
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                payload.applicant_ref,
+                payload.probability,
+                payload.risk_band,
+                payload.officer_decision,
+                payload.reason_text,
+            ),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT id, applicant_ref, probability, risk_band, officer_decision, reason_text, created_at "
+            "FROM reviews WHERE id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+    return dict(zip(
+        ("id", "applicant_ref", "probability", "risk_band", "officer_decision", "reason_text", "created_at"),
+        row,
+    ))
+
+
+@app.get("/reviews")
+def list_reviews():
+    REVIEW_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(REVIEW_DB_PATH)) as connection:
+        ensure_reviews_table(connection)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT id, applicant_ref, probability, risk_band, officer_decision, reason_text, created_at
+            FROM reviews
+            ORDER BY id DESC
+            """
+        ).fetchall()
+    return {"reviews": [dict(row) for row in rows]}
+
+
+@app.get("/threshold-analysis")
+def threshold_analysis(
+    fn_cost: float = Query(default=5.0, gt=0),
+    fp_cost: float = Query(default=1.0, gt=0),
+):
+    if not np.isfinite(fn_cost) or not np.isfinite(fp_cost):
+        raise HTTPException(status_code=422, detail="Costs must be finite and positive.")
+    if not THRESHOLD_CURVE_PATH.is_file():
+        raise HTTPException(
+            status_code=503,
+            detail="Stored validation predictions are unavailable; rebuild the validation threshold curve.",
+        )
+    curve = json.loads(THRESHOLD_CURVE_PATH.read_text(encoding="utf-8"))
+    return analyze_validation_curve(curve, fn_cost, fp_cost)
+
+
+@app.get("/lookup/{applicant_id}")
+def lookup_applicant(applicant_id: int):
+    if not PROCESSED_DATA_DIR.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail="Local held-out applicant lookup is unavailable: data/processed was not found.",
+        )
+    test_path = PROCESSED_DATA_DIR / "test.parquet"
+    if not test_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Local held-out applicant data is unavailable: data/processed/test.parquet was not found.",
+        )
+    test_frame = pd.read_parquet(test_path)
+    matches = test_frame.loc[test_frame["SK_ID_CURR"] == applicant_id]
+    if matches.empty:
+        raise HTTPException(status_code=404, detail="Applicant was not found in the local held-out test data.")
+
+    row = matches.iloc[[0]]
+    matrix = load_model_features(row.drop(columns=["TARGET"], errors="ignore"))
+    matrix = matrix.reindex(columns=service.model_feature_names).fillna(0.0)
+    probability = float(service.predict_calibrated(matrix)[0])
+    provided_features = {column: True for column in matrix.columns}
+    explanation = service.explain_model_matrix(matrix, provided_features=provided_features)
+    return {
+        "applicant_ref": str(applicant_id),
+        "calibrated_probability": probability,
+        "risk_band": service.risk_band(probability),
+        "top_reasons": explanation["raising_risk"],
+        "lowering_risk": explanation["lowering_risk"],
+        "association_note": explanation["association_note"],
+        "prototype_warning": "Local demo only; this held-out record is not an applicant lookup service.",
+    }
 
 
 def decision_response(payload: dict):

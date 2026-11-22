@@ -11,6 +11,20 @@ from src.models.training import load_model_features
 
 SENSITIVE_FIELDS = {"CODE_GENDER", "DAYS_BIRTH", "AGE_YEARS"}
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DERIVED_FEATURE_INPUTS = {
+    "ANNUITY_TO_CREDIT": {"AMT_ANNUITY", "AMT_CREDIT"},
+    "ANNUITY_TO_INCOME": {"AMT_ANNUITY", "AMT_INCOME_TOTAL"},
+    "CREDIT_TO_GOODS": {"AMT_CREDIT", "AMT_GOODS_PRICE"},
+    "DEBT_TO_INCOME": {"AMT_CREDIT", "AMT_INCOME_TOTAL"},
+    "EXT_SOURCE_PRODUCT_1_2": {"EXT_SOURCE_1", "EXT_SOURCE_2"},
+    "EXT_SOURCE_PRODUCT_2_3": {"EXT_SOURCE_2", "EXT_SOURCE_3"},
+}
+EXT_SOURCE_AGGREGATES = {
+    "EXT_SOURCE_MEAN",
+    "EXT_SOURCE_MIN",
+    "EXT_SOURCE_MAX",
+    "EXT_SOURCE_WEIGHTED_MEAN",
+}
 
 
 class ScoringService:
@@ -103,7 +117,45 @@ class ScoringService:
 
     def explain(self, payload: dict) -> dict:
         matrix = self.transform(payload)
-        return explain_applicant(self.base_model, self._to_model_frame(matrix), row=0)
+        provided_fields = {
+            field for field, value in payload.items()
+            if value is not None
+        }
+        provided_features = {
+            column: self._feature_was_provided(column, provided_fields)
+            for column in matrix.columns
+        }
+        return self.explain_model_matrix(matrix, provided_features)
+
+    def explain_model_matrix(
+        self,
+        matrix: pd.DataFrame,
+        provided_features: dict[str, bool] | None = None,
+    ) -> dict:
+        return explain_applicant(
+            self.base_model,
+            self._to_model_frame(matrix),
+            row=0,
+            provided_features=provided_features,
+        )
+
+    def _feature_was_provided(self, column: str, provided_fields: set[str]) -> bool:
+        if column.startswith("RAW_"):
+            return False
+
+        feature = column.removeprefix("WOE_")
+        if feature == "DAYS_EMPLOYED_ANOMALY":
+            return "DAYS_EMPLOYED" in provided_fields
+        if feature in DERIVED_FEATURE_INPUTS:
+            return DERIVED_FEATURE_INPUTS[feature].issubset(provided_fields)
+        if feature in EXT_SOURCE_AGGREGATES:
+            return bool({"EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3"} & provided_fields)
+
+        return any(
+            field in provided_fields
+            and (feature == field or feature.startswith(f"{field}_"))
+            for field in self.preprocessor.input_columns_
+        )
 
     def risk_band(self, probability: float) -> str:
         if probability < self.lower_risk_threshold:
