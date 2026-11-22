@@ -1,4 +1,4 @@
-pandas==3.0.4
+pandas==3.0.3
 numpy==2.5.0
 scikit-learn==1.9.1
 matplotlib==3.10.8
@@ -19,5 +19,4 @@ alembic==1.17.2
 kaggle==2.2.5
 optuna==4.6.0
 httpx==0.28.1
-httpx2==2.16.0
 imbalanced-learn==0.14.2

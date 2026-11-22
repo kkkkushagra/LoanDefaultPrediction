@@ -1,236 +1,124 @@
-# AI-Powered Loan Default Prediction System
+# Loan Default Prediction
 
-A project focused on building an explainable machine-learning solution for predicting loan default risk in banking and NBFC workflows. The system is designed to help lenders assess borrower risk early, reduce credit losses, and provide transparent reasoning for each decision.
+A prototype for scoring Home Credit loan applications with a fitted machine-learning model.
+It includes a FastAPI service and a React dashboard. It is an academic demonstration, not
+a production credit-decision system.
 
-## Project Overview
+## Status
 
-Banks and lenders often rely on static scorecards and manual judgment, which can miss non-linear risk patterns and delay intervention. This project introduces an AI-driven risk scoring workflow that evaluates applicant data, transforms it into risk-aware features, and predicts the probability of default using machine learning models.
+| Area | Status | What is present |
+|---|---|---|
+| Data preprocessing and feature pipeline | Done | Source code and fitted transformers are included. Running the data pipeline still requires the source dataset. |
+| Model scoring API | Done | `/health`, `/predict`, `/explain`, `/simulate`, `/application-options`, `/model-info`, and `/portfolio/summary`. |
+| Web dashboard | Done | Application scoring, what-if comparisons, model information, and a portfolio summary view. |
+| Model explainability and threshold | Prototype | Model associations and a cost-based cutoff are exposed; they are not causal or validated operating policies. |
+| Portfolio reporting | Prototype | A static aggregate in `docs/portfolio_summary.json`; it is not refreshed from a live portfolio. |
+| Authentication, database, case management, and human review workflow | Not implemented | The API has no authentication or persistence, and it does not route cases to reviewers. |
+| Early-warning alerts, production monitoring, and live credit-bureau integration | Not implemented | No live data feeds, alerting, or production drift monitoring are connected. |
+| Production readiness or regulatory certification | Not implemented | The model is not approved for real lending decisions. |
 
-The project emphasizes:
-- early-risk detection
-- transparency through explainability
-- operational usability for loan officers and risk managers
-- API-driven integration with loan origination systems
-- monitoring and retraining support for future production use
+## Model results and limitations
 
-## Key Objectives
+The existing calibration report records held-out test AUC **0.781905**, KS **0.432412**,
+and Brier score **0.067716** for the calibrated XGBoost model. These are results from one
+Home Credit train/validation/test split, not a guarantee of future performance. See
+[the calibration report](docs/calibration_report.md) and
+[the model comparison](docs/model_comparison.md) for the recorded evaluation.
 
-- reduce default-related financial losses
-- detect risky borrowers before disbursal or in early stages of the loan lifecycle
-- provide explainable outputs using SHAP-style feature importance
-- support governance, auditability, and decision transparency
-- create a working demo and technical design suitable for academic evaluation
+The current cost-based cutoff is **0.242685**, selected using validation data with assumed
+false-negative and false-positive costs. On the held-out test split it produced **11.28%
+recall** and **34.40% precision**; it is not a 70%-recall operating point. See the
+[review-threshold evaluation](docs/review_threshold_evaluation.md). Costs are placeholders,
+not observed lender costs. The portfolio screen shows precomputed aggregate test results
+from `docs/portfolio_summary.json`; it does not read borrower-level test data at runtime.
 
-## Project Scope
+Scores and explanations are decision-support demonstrations only. Model associations are
+not causes, and the threshold must not be interpreted as a recommendation to approve,
+decline, or manually review an application.
 
-### In Scope
-- dataset ingestion and validation
-- preprocessing and feature engineering
-- model training and comparison
-- explainability and reason codes
-- real-time scoring API
-- loan officer dashboard
-- historical trend analysis and monitoring
+## Run locally
 
-### Out of Scope
-- real bank production deployment
-- live credit-bureau integration
-- fully automated approval or rejection decisions
-- production regulatory certification in v1
-
-## Proposed Solution
-
-The solution combines ML and explainability to produce a risk score and a risk band for each applicant. Each prediction includes a probability of default and the top contributing features behind the result, enabling loan officers to understand why a borrower was flagged.
-
-## Technologies and Tools
-
-### Data and Machine Learning
-- Python
-- pandas
-- NumPy
-- scikit-learn
-- XGBoost
-- LightGBM
-- SHAP
-- Optuna
-- MLflow
-
-### Backend and API
-- FastAPI
-- Pydantic
-- SQLAlchemy
-- Alembic
-- PostgreSQL
-
-### Frontend and Visualization
-- React
-- Recharts
-
-### DevOps and Deployment
-- Docker
-- GitHub Actions
-- Render / AWS / Vercel-style deployment targets
-
-## Quality and Evaluation Goals
-
-The project targets the following demonstration quality benchmarks:
-- AUC-ROC >= 0.78
-- recall on defaulters >= 70%
-- p95 scoring latency <= 300 ms
-- top-5 SHAP-based reasons returned for each prediction
-- dashboard and API workflows suitable for loan decision support
-
-## Implementation Status
-
-The data and feature pipelines are implemented and validated against the real Home Credit
-`application_train.csv` dataset.
-
-- 307,511 application records are loaded for the current data pipeline.
-- Training and test splits contain 246,008 and 61,503 rows, respectively.
-- Missing-value indicators and the `DAYS_EMPLOYED` anomaly flag are generated by the data pipeline.
-- Gender and birth-derived age are stored in a separate audit frame and excluded from model features.
-- Financial ratios, external-source summaries, and optional bureau aggregates are generated by the feature pipeline.
-- Train-only WoE/IV filtering is applied; features with IV below 0.02 or above 0.50 are excluded.
-- The current real-data feature set contains no NaN or infinite values, and train/test feature columns match.
-
-Current real-data EDA findings:
-- Defaults: 24,825 records (8.0729%).
-- Non-defaults: 282,686 records (91.9271%).
-- `DAYS_EMPLOYED=365243` occurs in 55,374 records and is treated as a missing/anomaly value.
-- The highest missingness is approximately 69.87% for common-area aggregate columns.
-
-For the real fitted feature pipeline, retained features include `CREDIT_TO_GOODS`,
-`EMPLOYED_TO_AGE`, `EXT_SOURCE_MIN`, `EXT_SOURCE_MAX`, and `DAYS_EMPLOYED`. See
-[the feature report](./docs/feature_report.md) and [the EDA report](./docs/EDA_report.md)
-for the IV and distribution findings.
-
-## Architecture Overview
-
-The system is planned as a layered architecture:
-1. clients and user interfaces
-2. API layer for authentication and score requests
-3. model/service layer for preprocessing and prediction
-4. explainability layer for risk reason generation
-5. storage and monitoring layer for scores, outcomes, and drift tracking
-
-## User Roles
-
-- Loan Officer: reviews applicant risk and explains decisions
-- Risk Manager: monitors portfolio risk and trends
-- Integration Engineer: connects the scoring service to existing systems
-
-## Documentation
-
-- Project synopsis PDF: [Team36_ProjectSynopsis.pdf](./Team36_ProjectSynopsis.pdf)
-- [EDA report](./docs/EDA_report.md)
-- [Feature IV report](./docs/feature_report.md)
-- This README provides the project overview and setup context
-
-## Setup
+Use Python 3.12. Install the pinned dependencies and start the API:
 
 ```powershell
-py -m pip install -r requirements.txt
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-Place the Home Credit files in the ignored `data/` directory. The application pipeline
-expects:
-
-```text
-data/application_train.csv
-```
-
-Run the complete data and feature pipeline:
+In another terminal, start the frontend:
 
 ```powershell
-py -m src.data.run
+cd frontend
+npm ci
+npm run dev
 ```
 
-This writes the split datasets and fitted preprocessors under `data/processed/`, including:
+The Vite development server proxies `/api` requests to `http://127.0.0.1:8000`. Open the
+URL printed by Vite. Model serving uses the committed model and transformer artifacts;
+it does not require `data/raw` or processed parquet files.
 
-```text
-train.parquet
-test.parquet
-feature_train.parquet
-feature_test.parquet
-preprocessor.joblib
-feature_pipeline.joblib
-audit.parquet
-```
-
-Optional `data/bureau.csv` aggregation is enabled automatically when the file is present.
-
-Run the tests:
+Check the API and submit the seven-field sample:
 
 ```powershell
-py -m pytest tests -q
+curl.exe http://localhost:8000/health
+$payload = @'
+{"AMT_CREDIT":300000,"AMT_INCOME_TOTAL":100000,"AMT_ANNUITY":25000,"AMT_GOODS_PRICE":350000,"DAYS_EMPLOYED":-3653,"NAME_CONTRACT_TYPE":"Cash loans","NAME_INCOME_TYPE":"Working"}
+'@
+$payload | curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" --data-binary "@-"
 ```
 
-## Repository Structure
+`DAYS_EMPLOYED` is elapsed days and is normally negative for employed applicants.
+`/application-options` lists accepted loan and income categories. Optional request fields
+may be omitted.
 
-```text
-LoanDefaultPrediction/
-|-- README.md
-|-- Team36_ProjectSynopsis.pdf
-|-- src/
-|   |-- data/       # loading, validation, cleaning, preprocessing, and pipeline CLI
-|   `-- features/   # ratio engineering, bureau aggregates, IV, and WoE pipeline
-|-- data/           # ignored source and generated datasets
-|-- docs/           # EDA and feature reports
-|-- notebooks/      # executed data-analysis notebooks
-|-- tests/          # data and feature pipeline tests
-`-- requirements.txt
-```
+## Run with Docker Compose
 
-## Current Status
-
-The repository contains the project synopsis, real-data EDA, the data preprocessing pipeline,
-the sklearn-compatible feature pipeline, and pipeline tests. Model training, the scoring API,
-and the React dashboard remain planned work toward the full production workflow.
-The real-data final matrices contain 302 columns including `SK_ID_CURR` and `TARGET`,
-with five retained WoE features plus the preprocessed application features.
-Task 3 model baselines and Optuna-tuned XGBoost/LightGBM candidates are saved in
-MLflow and documented in [model_comparison.md](./docs/model_comparison.md). The test
-AUC target of 0.78 is not yet met; the CV-selected tuned XGBoost test AUC is 0.758018
-and the KS target of 0.35 is met at 0.386603.
-
-Task 3b external-table support is available through
-`python scripts/download_external_data.py` (requires Kaggle credentials) followed by
-`python scripts/aggregate_external_data.py`.
-
-## Calibration API
-
-Start the local API without retraining:
+Docker Desktop with Compose is required. Optionally copy `.env.example` to `.env` to
+override the host ports; the example contains no credentials.
 
 ```powershell
-py -m uvicorn backend.main:app --reload
+docker compose up --build
 ```
+
+The backend is available at `http://localhost:8000` and the dashboard at
+`http://localhost:8080`. Nginx serves the frontend and proxies `/api/` to the backend.
+The backend image runs as a non-root user and has a `/health` container health check.
+
+## Tests and CI
 
 ```powershell
-curl http://localhost:8000/health
-curl http://localhost:8000/application-options
-curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000,\"AMT_GOODS_PRICE\":350000,\"DAYS_EMPLOYED\":-3653,\"NAME_CONTRACT_TYPE\":\"Cash loans\",\"NAME_INCOME_TYPE\":\"Working\"}"
-curl -X POST http://localhost:8000/explain -H "Content-Type: application/json" -d "{\"AMT_CREDIT\":300000,\"AMT_INCOME_TOTAL\":100000,\"AMT_ANNUITY\":25000,\"AMT_GOODS_PRICE\":350000,\"DAYS_EMPLOYED\":-3653,\"NAME_CONTRACT_TYPE\":\"Cash loans\",\"NAME_INCOME_TYPE\":\"Working\"}"
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-`/application-options` returns the fitted encoder's accepted loan and income categories.
-The four added application fields are optional; blank values may be omitted, and the original
-three-field request remains supported. `DAYS_EMPLOYED` is elapsed days (negative for employed
-applicants); the dashboard accepts whole months and converts them before sending the request.
-`/simulate` accepts the same applicant object but only allows overrides for `AMT_CREDIT`,
-`AMT_INCOME_TOTAL`, and `AMT_ANNUITY`.
+The tests use synthetic fixtures and the committed model artifacts; they do not require
+raw or processed data files. GitHub Actions runs the Python tests and builds the frontend
+with `npm ci` and `npm run build`.
 
-## Team
+## Optional data pipeline
 
-- Team ID: 36
-- Institute: GLA University, Mathura
-- Course: B.Tech CSE (AIML and IoT)
-- Semester: 7
-- Project Lead: Kushagra Trivedi
+To run preprocessing and feature generation, place the Home Credit
+`application_train.csv` at `data/application_train.csv`, install the requirements above,
+and run:
 
-## References
+```powershell
+.\.venv\Scripts\python.exe -m src.data.run
+```
 
-The synopsis references RBI financial stability insights, credit-risk literature, and explainable AI methods for credit scoring.
+This writes borrower-level intermediate data under the ignored `data/` directory. Do not
+commit raw datasets, processed parquet files, or other borrower-level records. Only the
+fitted `preprocessor.joblib` and `feature_pipeline.joblib` are tracked for serving.
+Optional external-table aggregation scripts require their corresponding source files.
 
-## License
+## Repository map
 
-This project is intended for academic and educational use as part of the Major Project submission. Please check the institution's guidance and repository policies before reuse or redistribution.
+- `backend/`: FastAPI application and scoring service
+- `frontend/`: React/Vite dashboard and production nginx configuration
+- `src/`: data, feature, and model code
+- `models/`: saved scoring models
+- `data/processed/`: only the two fitted transformer artifacts are tracked
+- `docs/`: reports and the static portfolio summary
+- `tests/`: API, model, data, and feature tests
+
+See the [project synopsis](Team36_ProjectSynopsis.pdf), [EDA report](docs/EDA_report.md),
+and [feature report](docs/feature_report.md) for additional project context.

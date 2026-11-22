@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 import pandas as pd
 import numpy as np
@@ -8,6 +11,22 @@ from backend.main import app
 def test_health():
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_portfolio_summary_uses_documented_json_without_parquet(monkeypatch):
+    def fail_if_parquet_is_read(*args, **kwargs):
+        raise AssertionError("portfolio summary must not read parquet data")
+
+    monkeypatch.setattr(pd, "read_parquet", fail_if_parquet_is_read)
+    with TestClient(app) as client:
+        response = client.get("/portfolio/summary")
+
+    assert response.status_code == 200
+    assert response.json() == json.loads(
+        (Path(__file__).resolve().parents[1] / "docs/portfolio_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
 
 def test_valid_predict():
@@ -222,16 +241,25 @@ def test_simulation_carries_optional_application_details_to_both_scores(monkeypa
         assert scored[1] == {**applicant, "AMT_CREDIT": 400000}
 
 
-def test_manual_calibration_matches_wrapper_on_test_rows():
+def test_manual_calibration_matches_booster_and_stored_calibrator():
     import xgboost as xgb
 
     from backend.service import ScoringService
-    from src.models.training import load_model_features
 
     service = ScoringService()
-    test = pd.read_parquet("data/processed/test.parquet").drop(columns=["TARGET"], errors="ignore").iloc[:20]
-    matrix = load_model_features(test).reindex(columns=service.model_feature_names).fillna(0.0)
-    frame = service._to_model_frame(matrix)
+    test = pd.DataFrame([
+        {
+            "AMT_CREDIT": 300000 + index * 1000,
+            "AMT_INCOME_TOTAL": 100000 + index * 500,
+            "AMT_ANNUITY": 25000 + index * 100,
+            "AMT_GOODS_PRICE": 350000 + index * 800,
+            "DAYS_EMPLOYED": -3653 - index * 30,
+            "NAME_CONTRACT_TYPE": "Cash loans" if index % 2 == 0 else "Revolving loans",
+            "NAME_INCOME_TYPE": "Working" if index % 2 == 0 else "Pensioner",
+        }
+        for index in range(20)
+    ])
+    frame = service.transform(test)
     manual = service.predict_calibrated(frame)
 
     # xgboost 3.1 cannot read column names from pandas 3 DataFrames, so the sklearn wrapper

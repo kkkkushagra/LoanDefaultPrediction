@@ -2,6 +2,10 @@
 venv/
 data/*
 !data/.gitkeep
+!data/processed/
+data/processed/*
+!data/processed/preprocessor.joblib
+!data/processed/feature_pipeline.joblib
 mlruns/
 mlflow.db
 .coverage
@@ -10,3 +14,4 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 *.log
+.env

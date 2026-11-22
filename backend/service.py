@@ -114,22 +114,4 @@ class ScoringService:
 
     def portfolio_summary(self) -> dict:
         path = self.root / "docs/portfolio_summary.json"
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-        test_matrix = load_model_features(
-                pd.read_parquet(self.root / "data/processed/test.parquet").drop(columns=["TARGET"], errors="ignore")
-            ).reindex(columns=self.model_feature_names).fillna(0.0)
-        probabilities = self.predict_calibrated(self._to_model_frame(test_matrix))
-        target = pd.read_parquet(self.root / "data/processed/test.parquet")["TARGET"]
-        bands = np.array([self.risk_band(value) for value in probabilities])
-        return {
-            "rows": [
-                {
-                    "band": band,
-                    "count": int((bands == band).sum()),
-                    "applicant_share": float((bands == band).mean()),
-                    "observed_default_rate": float(target.to_numpy()[bands == band].mean()),
-                }
-                for band in ("Low", "Medium", "High")
-            ]
-        }
+        return json.loads(path.read_text(encoding="utf-8"))
