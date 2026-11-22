@@ -147,7 +147,7 @@ def write_report(
             f"({test['selected']['flagged_count']:,}) |"
         ),
         "",
-        "The dashboard's threshold was not changed.",
+        "The Current row uses the dashboard's validation-curve default (ASSUMED FN=5, FP=1); the target-recall candidate is not active.",
         "",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)

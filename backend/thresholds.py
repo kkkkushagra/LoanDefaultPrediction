@@ -1,6 +1,17 @@
 import math
+import json
+from pathlib import Path
 
 import numpy as np
+
+DEFAULT_FN_COST = 5.0
+DEFAULT_FP_COST = 1.0
+
+
+def load_validation_curve(path: Path) -> dict:
+    if not path.is_file():
+        raise FileNotFoundError(f"Stored validation threshold curve not found: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def build_validation_curve(

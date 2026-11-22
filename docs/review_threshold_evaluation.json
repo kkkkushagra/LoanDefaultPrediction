@@ -17,11 +17,11 @@
     "sample_size": 49202,
     "positive_count": 3972,
     "current_threshold": {
-      "threshold": 0.24268546505138983,
-      "recall": 0.09667673716012085,
-      "precision": 0.30427892234548337,
-      "flagged_count": 1262,
-      "flagged_share": 0.02564936384699809
+      "threshold": 0.179,
+      "recall": 0.32628398791540786,
+      "precision": 0.22554820744865994,
+      "flagged_count": 5746,
+      "flagged_share": 0.1167838705743669
     },
     "selected_threshold": 0.10325048863887787,
     "selected_recall": 0.6981369587109768
@@ -31,11 +31,11 @@
     "sample_size": 61503,
     "positive_count": 4965,
     "current": {
-      "threshold": 0.24268546505138983,
-      "recall": 0.11278952668680765,
-      "precision": 0.343980343980344,
-      "flagged_count": 1628,
-      "flagged_share": 0.026470253483569905
+      "threshold": 0.179,
+      "recall": 0.3337361530715005,
+      "precision": 0.2317806686249825,
+      "flagged_count": 7149,
+      "flagged_share": 0.11623823228135213
     },
     "selected": {
       "threshold": 0.10325048863887787,

@@ -7,6 +7,12 @@ import pandas as pd
 import xgboost as xgb
 from src.models.explain import explain_applicant
 from src.models.training import load_model_features
+from .thresholds import (
+    DEFAULT_FN_COST,
+    DEFAULT_FP_COST,
+    analyze_validation_curve,
+    load_validation_curve,
+)
 
 
 SENSITIVE_FIELDS = {"CODE_GENDER", "DAYS_BIRTH", "AGE_YEARS"}
@@ -42,11 +48,16 @@ class ScoringService:
             raise RuntimeError("Underlying xgboost model has no fitted booster feature names")
         self.model_feature_names = list(feature_names)
         self.lower_risk_threshold, self.upper_risk_threshold = self.artifact["risk_thresholds"]
-        self.cost_threshold = float(self.artifact["cost_threshold"])
         try:
             self.predict_calibrated(self._to_model_frame(pd.DataFrame([[np.nan] * len(self.model_feature_names)])))
         except Exception as exc:
             raise RuntimeError(f"Model startup self-check failed: {exc}") from exc
+
+    @property
+    def cost_threshold(self) -> float:
+        curve = load_validation_curve(self.root / "docs/validation_threshold_curve.json")
+        analysis = analyze_validation_curve(curve, DEFAULT_FN_COST, DEFAULT_FP_COST)
+        return float(analysis["threshold"])
 
     @staticmethod
     def _find_xgb_model(value):

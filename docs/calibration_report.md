@@ -51,13 +51,10 @@ Thresholds selected only from validation data: Low < 0.070406; Medium < 0.167995
 
 ## Cost-based threshold
 
-> ASSUMED placeholders, not real bank costs.
-
-- Assumed false-negative cost (`--cost-fn`): 5
-- Assumed false-positive cost (`--cost-fp`): 1
-- Validation-selected threshold: 0.242685
-- Expected normalized test cost at selected threshold: 0.320846
-- Expected normalized test cost at 0.5: 0.363251
+The former model-artifact cutoff and its test-cost comparison are historical results from
+the earlier evaluation run, not the current dashboard policy. Score and Model now use the
+same aggregate validation curve in `validation_threshold_curve.json` with default ASSUMED
+costs FN=5 and FP=1. The live threshold is calculated from that curve at runtime.
 
 ## Limitations
 

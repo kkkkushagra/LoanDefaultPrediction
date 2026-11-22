@@ -231,7 +231,7 @@ def make_report(result: dict, command: str) -> str:
         "Uses the saved fitted model, preprocessor, and feature pipeline. It does not train "
         "or refit model artifacts. Gender and age are joined from the audit frame by "
         "`SK_ID_CURR` and are used only to calculate reporting groups; they are not sent "
-        "to the scorer. Review flags use the model artifact's current cutoff.",
+        "to the scorer. Review flags use the validation-curve default (ASSUMED FN=5, FP=1).",
         "",
         "A group is labeled `small` when it has fewer than "
         f"{result['fairness']['minimum_group_size']} applicants; its metrics are shown but "

@@ -6,37 +6,44 @@ a production credit-decision system.
 
 ## Status
 
-| Area | Status | What is present |
+| Capability | Status | What is present |
 |---|---|---|
-| Data preprocessing and feature pipeline | Done | Source code and fitted transformers are included. Running the data pipeline still requires the source dataset. |
-| Model scoring API | Done | `/health`, `/predict`, `/explain`, `/simulate`, `/application-options`, `/model-info`, and `/portfolio/summary`. |
-| Web dashboard | Done | Application scoring, what-if comparisons, model information, portfolio summary, and review-history views. |
-| Review audit trail | Prototype | Approve/refer/decline decisions and required reasons are stored in SQLite. No authentication or access control is implemented. |
-| Cost threshold analysis | Prototype | Interactive assumed-cost sliders use an aggregate curve derived only from stored calibration-validation predictions, quantized to 0.001. |
-| Applicant lookup | Prototype (local only) | `/lookup/{id}` scores and explains held-out rows only when local `data/processed/test.parquet` exists. Not included in Docker. |
-| Model explainability and threshold | Prototype | Model associations and a cost-based cutoff are exposed; they are not causal or validated operating policies. |
-| Portfolio reporting | Prototype | A static aggregate in `docs/portfolio_summary.json`; it is not refreshed from a live portfolio. |
-| Authentication, reviewer identity, and case routing | Not implemented | Review entries are unauthenticated prototype records and are not routed to officers. |
-| Early-warning alerts, production monitoring, and live credit-bureau integration | Not implemented | No live data feeds, alerting, or production drift monitoring are connected. |
-| Production readiness or regulatory certification | Not implemented | The model is not approved for real lending decisions. |
+| Data pipeline and feature pipeline | Done | Source code and fitted transformers; running it requires the source dataset. |
+| Calibrated XGBoost model | Done | Saved model with calibration; no retraining is performed by the app. |
+| SHAP explanations | Done | Local feature attributions; associations are not causal. |
+| FastAPI | Done | Health, scoring, explanations, simulation, model info, and portfolio summary endpoints. |
+| Dashboard | Done | Scoring, what-if, portfolio, model, and review-history views. |
+| Fairness and PSI audit | Done | Offline audit reports; PSI includes a simulated-shift demonstration, not live monitoring. |
+| Docker and CI | Done | Docker Compose app and GitHub Actions Python/frontend checks. |
+| Review log | Prototype | SQLite decision log; no authentication or reviewer identity. |
+| Cost threshold analysis | Prototype | Score and Model use the same stored validation curve and ASSUMED default costs (FN=5, FP=1). |
+| Applicant lookup | Prototype | Local-only held-out lookup; requires `data/processed/test.parquet`, excluded from Docker. |
+| Authentication | Not implemented | No login or access control. |
+| PostgreSQL | Not implemented | Review prototype uses SQLite only. |
+| Early-warning alerts | Not implemented | No alerting or production drift monitoring. |
+| Real cost data | Not implemented | False-negative and false-positive costs are assumptions, not lender data. |
+
+## Screenshots
+
+![Score tab](docs/screenshots/score-tab.png)
+
+![Model tab threshold analysis](docs/screenshots/model-tab.png)
 
 ## Model results and limitations
 
-The existing calibration report records held-out test AUC **0.781905**, KS **0.432412**,
-and Brier score **0.067716** for the calibrated XGBoost model. These are results from one
-Home Credit train/validation/test split, not a guarantee of future performance. See
+The calibrated full-feature model's held-out AUC is **0.7819**; the reported AUC using
+seven-field inputs is **0.7269**. The calibration report also records KS **0.432412** and
+Brier score **0.067716**. These are results from one Home Credit split, not a guarantee of
+future performance. See
 [the calibration report](docs/calibration_report.md) and
 [the model comparison](docs/model_comparison.md) for the recorded evaluation.
 
-The current cost-based cutoff is **0.242685**, selected using validation data with assumed
-false-negative and false-positive costs. On the held-out test split it produced **11.28%
-recall** and **34.40% precision**; it is not a 70%-recall operating point. See the
-[review-threshold evaluation](docs/review_threshold_evaluation.md). Costs are placeholders,
-not observed lender costs. The portfolio screen shows precomputed aggregate test results
+The Score tab and Model tab use the same aggregated calibration-validation curve, with
+default ASSUMED costs FN=5 and FP=1. The Score tab uses the corresponding default threshold;
+the Model tab recalculates it as the cost sliders move. Probabilities are grouped into
+0.001-wide bins, and no applicant identifiers are stored in that curve.
+Costs are placeholders, not observed lender costs. The portfolio screen shows precomputed aggregate test results
 from `docs/portfolio_summary.json`; it does not read borrower-level test data at runtime.
-The Model tab's cost analysis uses only a precomputed, aggregated calibration-validation
-score curve (`docs/validation_threshold_curve.json`); score bins are 0.001 wide and no
-applicant identifiers are stored in that curve.
 
 Scores and explanations are decision-support demonstrations only. Model associations are
 not causes, and the threshold must not be interpreted as a recommendation to approve,

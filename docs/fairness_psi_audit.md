@@ -2,20 +2,20 @@
 
 Reproduce with: `.\.venv\Scripts\python.exe -m scripts.run_fairness_psi_audit`
 
-Uses the saved fitted model, preprocessor, and feature pipeline. It does not train or refit model artifacts. Gender and age are joined from the audit frame by `SK_ID_CURR` and are used only to calculate reporting groups; they are not sent to the scorer. Review flags use the model artifact's current cutoff.
+Uses the saved fitted model, preprocessor, and feature pipeline. It does not train or refit model artifacts. Gender and age are joined from the audit frame by `SK_ID_CURR` and are used only to calculate reporting groups; they are not sent to the scorer. Review flags use the validation-curve default (ASSUMED FN=5, FP=1).
 
 A group is labeled `small` when it has fewer than 100 applicants; its metrics are shown but should be interpreted cautiously. Missing groups are listed explicitly, with `n/a` metrics where no denominator exists.
 
 - Held-out test applications: 61,503
 - Positive cases: 4,965
-- Current review threshold: 0.242685465
+- Current review threshold: 0.179000000
 
 ## Gender groups
 
 | Group | N | Status | Observed default rate | Flag rate | Recall | False-positive rate |
 |---|---:|---|---:|---:|---:|---:|
-| F | 40,561 | ok | 6.99% | 2.22% | 11.07% | 1.55% |
-| M | 20,940 | ok | 10.17% | 3.13% | 11.04% | 2.24% |
+| F | 40,561 | ok | 6.99% | 9.87% | 31.31% | 8.26% |
+| M | 20,940 | ok | 10.17% | 12.87% | 33.26% | 10.56% |
 | Missing / unknown | 0 | missing | n/a | n/a | n/a | n/a |
 | XNA | 2 | small | 0.00% | 0.00% | n/a | 0.00% |
 
@@ -23,12 +23,12 @@ A group is labeled `small` when it has fewer than 100 applicants; its metrics ar
 
 | Group | N | Status | Observed default rate | Flag rate | Recall | False-positive rate |
 |---|---:|---|---:|---:|---:|---:|
-| 18-24 | 2,355 | ok | 11.80% | 3.86% | 10.07% | 3.03% |
-| 25-34 | 14,304 | ok | 10.55% | 3.87% | 13.78% | 2.70% |
-| 35-44 | 16,912 | ok | 8.24% | 2.65% | 10.98% | 1.90% |
-| 45-54 | 14,041 | ok | 7.39% | 2.46% | 11.75% | 1.71% |
-| 55-64 | 12,166 | ok | 5.61% | 0.95% | 5.57% | 0.68% |
-| 65+ | 1,725 | ok | 3.71% | 0.06% | 0.00% | 0.06% |
+| 18-24 | 2,355 | ok | 11.80% | 17.20% | 32.01% | 15.21% |
+| 25-34 | 14,304 | ok | 10.55% | 16.08% | 39.03% | 13.37% |
+| 35-44 | 16,912 | ok | 8.24% | 11.90% | 33.43% | 9.97% |
+| 45-54 | 14,041 | ok | 7.39% | 9.90% | 32.66% | 8.08% |
+| 55-64 | 12,166 | ok | 5.61% | 4.73% | 16.13% | 4.06% |
+| 65+ | 1,725 | ok | 3.71% | 0.81% | 4.69% | 0.66% |
 | Under 18 | 0 | missing | n/a | n/a | n/a | n/a |
 | Missing / unknown | 0 | missing | n/a | n/a | n/a | n/a |
 

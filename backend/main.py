@@ -1,6 +1,5 @@
 from datetime import datetime
 from contextlib import closing
-import json
 import os
 from pathlib import Path
 import sqlite3
@@ -16,7 +15,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, create_model
 
 from .service import SENSITIVE_FIELDS, ScoringService
-from .thresholds import analyze_validation_curve
+from .thresholds import (
+    DEFAULT_FN_COST,
+    DEFAULT_FP_COST,
+    analyze_validation_curve,
+    load_validation_curve,
+)
 from src.models.training import load_model_features
 
 
@@ -116,6 +120,10 @@ def model_info():
         "date": service.artifact["date"],
         "metrics_documented_in": "docs/calibration_report.md",
         "assumed_cost_warning": "ASSUMED placeholders, not real bank costs.",
+        "threshold_cost_defaults": {
+            "fn_cost": DEFAULT_FN_COST,
+            "fp_cost": DEFAULT_FP_COST,
+        },
         "calibration_report_available": bool(report),
     }
 
@@ -189,11 +197,7 @@ def list_reviews():
     return {"reviews": [dict(row) for row in rows]}
 
 
-@app.get("/threshold-analysis")
-def threshold_analysis(
-    fn_cost: float = Query(default=5.0, gt=0),
-    fp_cost: float = Query(default=1.0, gt=0),
-):
+def calculate_threshold_analysis(fn_cost: float, fp_cost: float) -> dict:
     if not np.isfinite(fn_cost) or not np.isfinite(fp_cost):
         raise HTTPException(status_code=422, detail="Costs must be finite and positive.")
     if not THRESHOLD_CURVE_PATH.is_file():
@@ -201,8 +205,20 @@ def threshold_analysis(
             status_code=503,
             detail="Stored validation predictions are unavailable; rebuild the validation threshold curve.",
         )
-    curve = json.loads(THRESHOLD_CURVE_PATH.read_text(encoding="utf-8"))
+    curve = load_validation_curve(THRESHOLD_CURVE_PATH)
     return analyze_validation_curve(curve, fn_cost, fp_cost)
+
+
+@app.get("/threshold-analysis")
+def threshold_analysis(
+    fn_cost: float = Query(default=DEFAULT_FN_COST, gt=0),
+    fp_cost: float = Query(default=DEFAULT_FP_COST, gt=0),
+):
+    analysis = calculate_threshold_analysis(fn_cost, fp_cost)
+    return {
+        **analysis,
+        "assumed_costs": {"fn_cost": fn_cost, "fp_cost": fp_cost},
+    }
 
 
 @app.get("/lookup/{applicant_id}")
@@ -244,12 +260,17 @@ def decision_response(payload: dict):
     probability = service.predict(payload)
     band = service.risk_band(probability)
     reasons = service.explain(payload)["raising_risk"]
+    threshold = calculate_threshold_analysis(DEFAULT_FN_COST, DEFAULT_FP_COST)["threshold"]
     return {
         "calibrated_probability": probability,
         "risk_band": band,
-        "decision": probability >= service.cost_threshold,
+        "decision": probability >= threshold,
         "decision_label": "above_assumed_cost_threshold",
-        "cost_threshold": service.cost_threshold,
+        "cost_threshold": threshold,
+        "assumed_costs": {
+            "fn_cost": DEFAULT_FN_COST,
+            "fp_cost": DEFAULT_FP_COST,
+        },
         "cost_assumption_warning": "ASSUMED placeholders, not real bank costs.",
         "top_reasons": reasons,
         "association_note": "Model associations, not causes.",
@@ -267,10 +288,16 @@ def explain(payload: RawApplication):
     values = payload.model_dump(exclude_none=True)
     probability = service.predict(values)
     explanation = service.explain(values)
+    threshold = calculate_threshold_analysis(DEFAULT_FN_COST, DEFAULT_FP_COST)["threshold"]
     return {
         "calibrated_probability": probability,
         "risk_band": service.risk_band(probability),
-        "decision": probability >= service.cost_threshold,
+        "decision": probability >= threshold,
+        "cost_threshold": threshold,
+        "assumed_costs": {
+            "fn_cost": DEFAULT_FN_COST,
+            "fp_cost": DEFAULT_FP_COST,
+        },
         "top_reasons": explanation["raising_risk"],
         "lowering_risk": explanation["lowering_risk"],
         "association_note": explanation["association_note"],

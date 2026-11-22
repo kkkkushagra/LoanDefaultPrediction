@@ -53,6 +53,20 @@ def test_threshold_analysis_uses_stored_validation_curve(tmp_path, monkeypatch):
     assert result["precision"] == 2 / 3
     assert result["validation_sample_size"] == 4
     assert "ASSUMED" in result["assumed_cost_warning"]
+    assert result["assumed_costs"] == {"fn_cost": 2, "fp_cost": 1}
+
+
+def test_score_threshold_matches_default_validation_curve(monkeypatch):
+    analysis = api.calculate_threshold_analysis(5, 1)
+    monkeypatch.setattr(api.service, "predict", lambda payload: analysis["threshold"])
+    monkeypatch.setattr(api.service, "explain", lambda payload: {"raising_risk": []})
+
+    score = api.decision_response({})
+
+    assert score["cost_threshold"] == analysis["threshold"]
+    assert score["decision"] is True
+    assert score["assumed_costs"] == {"fn_cost": 5, "fp_cost": 1}
+    assert api.service.cost_threshold == analysis["threshold"]
 
 
 def test_lookup_is_disabled_without_local_processed_data(tmp_path, monkeypatch):

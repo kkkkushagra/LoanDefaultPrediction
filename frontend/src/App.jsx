@@ -163,6 +163,7 @@ function ScoreSummary({ title, result }) {
 
   const {
     calibrated_probability: probability, risk_band: band, decision, cost_threshold: threshold,
+    assumed_costs: assumedCosts,
   } = result
 
   return (
@@ -179,7 +180,9 @@ function ScoreSummary({ title, result }) {
         <strong>{decision ? 'Flagged for review' : 'Below review threshold'}</strong>
         <span className="muted">{percent(threshold)} threshold</span>
       </div>
-      <p className="text-xs muted">The review threshold uses assumed costs.</p>
+      <p className="text-xs muted">
+        Validation-curve threshold · ASSUMED FN={assumedCosts.fn_cost}, FP={assumedCosts.fp_cost}
+      </p>
     </section>
   )
 }
@@ -476,14 +479,17 @@ function ModelView({ info }) {
           View checked-in calibration report <ArrowRight size={16} aria-hidden="true" />
         </a>
       )}
-      <ThresholdAnalysis />
+      <ThresholdAnalysis
+        defaultFnCost={info.threshold_cost_defaults.fn_cost}
+        defaultFpCost={info.threshold_cost_defaults.fp_cost}
+      />
     </section>
   )
 }
 
-function ThresholdAnalysis() {
-  const [fnCost, setFnCost] = useState(5)
-  const [fpCost, setFpCost] = useState(1)
+function ThresholdAnalysis({ defaultFnCost, defaultFpCost }) {
+  const [fnCost, setFnCost] = useState(defaultFnCost)
+  const [fpCost, setFpCost] = useState(defaultFpCost)
   const analysis = useJob()
 
   useEffect(() => {

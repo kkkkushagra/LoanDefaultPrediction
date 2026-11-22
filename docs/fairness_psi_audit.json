@@ -2,7 +2,7 @@
   "fairness": {
     "sample_size": 61503,
     "positive_count": 4965,
-    "threshold": 0.24268546505138983,
+    "threshold": 0.179,
     "minimum_group_size": 100,
     "gender": [
       {
@@ -10,18 +10,18 @@
         "group_size": 40561,
         "status": "ok",
         "observed_default_rate": 0.06991938068588052,
-        "flag_rate": 0.02216414782673011,
-        "recall": 0.11071932299012693,
-        "false_positive_rate": 0.015506958250497018
+        "flag_rate": 0.09869086067897734,
+        "recall": 0.3131170662905501,
+        "false_positive_rate": 0.08257123923127899
       },
       {
         "group": "M",
         "group_size": 20940,
         "status": "ok",
         "observed_default_rate": 0.10167144221585482,
-        "flag_rate": 0.03132760267430754,
-        "recall": 0.1103804603100047,
-        "false_positive_rate": 0.022380522034979533
+        "flag_rate": 0.1287010506208214,
+        "recall": 0.33255049318929075,
+        "false_positive_rate": 0.10562968475891765
       },
       {
         "group": "Missing / unknown",
@@ -48,54 +48,54 @@
         "group_size": 2355,
         "status": "ok",
         "observed_default_rate": 0.11804670912951168,
-        "flag_rate": 0.038641188959660296,
-        "recall": 0.10071942446043165,
-        "false_positive_rate": 0.03033220991815118
+        "flag_rate": 0.17197452229299362,
+        "recall": 0.32014388489208634,
+        "false_positive_rate": 0.15214251324025035
       },
       {
         "group": "25-34",
         "group_size": 14304,
         "status": "ok",
         "observed_default_rate": 0.10549496644295302,
-        "flag_rate": 0.038730425055928414,
-        "recall": 0.13783962889330684,
-        "false_positive_rate": 0.027041813208284485
+        "flag_rate": 0.16079418344519017,
+        "recall": 0.3903247183565275,
+        "false_positive_rate": 0.1337241109808519
       },
       {
         "group": "35-44",
         "group_size": 16912,
         "status": "ok",
         "observed_default_rate": 0.08242667928098392,
-        "flag_rate": 0.026490066225165563,
-        "recall": 0.10975609756097561,
-        "false_positive_rate": 0.019010181724449026
+        "flag_rate": 0.1190279091769158,
+        "recall": 0.33428981348637016,
+        "false_positive_rate": 0.09969068178889032
       },
       {
         "group": "45-54",
         "group_size": 14041,
         "status": "ok",
         "observed_default_rate": 0.07392635852147283,
-        "flag_rate": 0.02457089950858201,
-        "recall": 0.11753371868978806,
-        "false_positive_rate": 0.01714988848727217
+        "flag_rate": 0.09899579802008404,
+        "recall": 0.3265895953757225,
+        "false_positive_rate": 0.08082750134584327
       },
       {
         "group": "55-64",
         "group_size": 12166,
         "status": "ok",
         "observed_default_rate": 0.05605786618444846,
-        "flag_rate": 0.009534769028439914,
-        "recall": 0.05571847507331378,
-        "false_positive_rate": 0.006792058516196447
+        "flag_rate": 0.04734506000328785,
+        "recall": 0.16129032258064516,
+        "false_positive_rate": 0.040578195750609544
       },
       {
         "group": "65+",
         "group_size": 1725,
         "status": "ok",
         "observed_default_rate": 0.03710144927536232,
-        "flag_rate": 0.0005797101449275362,
-        "recall": 0.0,
-        "false_positive_rate": 0.0006020469596628537
+        "flag_rate": 0.008115942028985508,
+        "recall": 0.046875,
+        "false_positive_rate": 0.006622516556291391
       },
       {
         "group": "Under 18",

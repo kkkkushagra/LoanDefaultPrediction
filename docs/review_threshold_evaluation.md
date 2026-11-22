@@ -22,7 +22,7 @@ The selected threshold is the available validation-score cutoff whose recall is 
 
 | Threshold | Recall | Precision | Flagged for review |
 |---|---:|---:|---:|
-| Current (0.242685465) | 11.278953% | 34.398034% | 2.647025% (1,628) |
+| Current (0.179000000) | 33.373615% | 23.178067% | 11.623823% (7,149) |
 | Validation-selected (0.103250489) | 70.231621% | 14.480296% | 39.154188% (24,081) |
 
-The dashboard's threshold was not changed.
+The Current row uses the dashboard's validation-curve default (ASSUMED FN=5, FP=1); the target-recall candidate is not active.
