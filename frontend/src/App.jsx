@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
-  Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BarChart3, Boxes,
+  Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BarChart3,
   Calculator, ChevronRight, CircleHelp, ClipboardList, FlaskConical, Gauge, Play,
 } from 'lucide-react'
 import { request } from './api'
@@ -25,12 +25,6 @@ const views = {
     title: 'Portfolio performance',
     description: 'Review the distribution and observed outcomes across risk bands.',
     icon: BarChart3,
-  },
-  model: {
-    label: 'Model',
-    title: 'Model information',
-    description: 'Review the scoring model and the assumptions behind its threshold.',
-    icon: Boxes,
   },
   reviews: {
     label: 'Review history',
@@ -459,91 +453,6 @@ function RemoteView({ path, children }) {
   return job.data ? children(job.data) : <p className="panel muted" role="status">Loading…</p>
 }
 
-function ModelView({ info }) {
-  return (
-    <section className="panel space-y-5">
-      <h2>Scoring model</h2>
-      <dl className="baseline">
-        <div><dt>Model</dt><dd>{info.model}</dd></div>
-        <div><dt>Version</dt><dd>{info.version}</dd></div>
-        <div><dt>Artifact date</dt><dd>{info.date}</dd></div>
-      </dl>
-      <div className="note"><CircleHelp size={17} aria-hidden="true" /><p>{info.assumed_cost_warning}</p></div>
-      {info.calibration_report_available && (
-        <a
-          className="text-button"
-          href="https://github.com/kkkkushagra/LoanDefaultPrediction/blob/61986db/docs/calibration_report.md"
-          target="_blank"
-          rel="noreferrer"
-        >
-          View checked-in calibration report <ArrowRight size={16} aria-hidden="true" />
-        </a>
-      )}
-      <ThresholdAnalysis
-        defaultFnCost={info.threshold_cost_defaults.fn_cost}
-        defaultFpCost={info.threshold_cost_defaults.fp_cost}
-      />
-    </section>
-  )
-}
-
-function ThresholdAnalysis({ defaultFnCost, defaultFpCost }) {
-  const [fnCost, setFnCost] = useState(defaultFnCost)
-  const [fpCost, setFpCost] = useState(defaultFpCost)
-  const analysis = useJob()
-
-  useEffect(() => {
-    const query = new URLSearchParams({ fn_cost: fnCost, fp_cost: fpCost })
-    const timer = setTimeout(() => {
-      analysis.run(() => request('/threshold-analysis?' + query.toString()))
-    }, 120)
-    return () => clearTimeout(timer)
-  }, [fnCost, fpCost])
-
-  return (
-    <div className="threshold-analysis">
-      <div>
-        <h3>ASSUMED cost sensitivity</h3>
-        <p className="muted text-sm">
-          Recalculates against stored calibration-validation predictions only, in 0.001 score bins.
-        </p>
-      </div>
-      <label className="cost-slider">
-        <span>False-negative cost: ASSUMED {fnCost}</span>
-        <input
-          type="range"
-          min="0.1"
-          max="20"
-          step="0.1"
-          value={fnCost}
-          onChange={(event) => setFnCost(Number(event.target.value))}
-        />
-      </label>
-      <label className="cost-slider">
-        <span>False-positive cost: ASSUMED {fpCost}</span>
-        <input
-          type="range"
-          min="0.1"
-          max="20"
-          step="0.1"
-          value={fpCost}
-          onChange={(event) => setFpCost(Number(event.target.value))}
-        />
-      </label>
-      {analysis.error && <ErrorMessage error={analysis.error} />}
-      {analysis.pending && <p className="muted text-sm" role="status">Updating threshold…</p>}
-      {analysis.data && (
-        <dl className="threshold-results">
-          <div><dt>Threshold</dt><dd>{analysis.data.threshold.toFixed(3)}</dd></div>
-          <div><dt>Flagged</dt><dd>{analysis.data.flagged_percent.toFixed(2)}%</dd></div>
-          <div><dt>Validation recall</dt><dd>{percent(analysis.data.recall)}</dd></div>
-          <div><dt>Validation precision</dt><dd>{percent(analysis.data.precision)}</dd></div>
-        </dl>
-      )}
-    </div>
-  )
-}
-
 function ReviewHistory({ data }) {
   return (
     <section className="panel space-y-4">
@@ -664,9 +573,6 @@ export function App() {
               </Suspense>
             )}
           </RemoteView>
-        )}
-        {view === 'model' && (
-          <RemoteView path="/model-info">{(data) => <ModelView info={data} />}</RemoteView>
         )}
         {view === 'reviews' && (
           <RemoteView path="/reviews">{(data) => <ReviewHistory data={data} />}</RemoteView>

@@ -12,11 +12,11 @@ a production credit-decision system.
 | Calibrated XGBoost model | Done | Saved model with calibration; no retraining is performed by the app. |
 | SHAP explanations | Done | Local feature attributions; associations are not causal. |
 | FastAPI | Done | Health, scoring, explanations, simulation, model info, and portfolio summary endpoints. |
-| Dashboard | Done | Scoring, what-if, portfolio, model, and review-history views. |
+| Dashboard | Done | Scoring, what-if, portfolio, and review-history views. |
 | Fairness and PSI audit | Done | Offline audit reports; PSI includes a simulated-shift demonstration, not live monitoring. |
 | Docker and CI | Done | Docker Compose app and GitHub Actions Python/frontend checks. |
 | Review log | Prototype | SQLite decision log; no authentication or reviewer identity. |
-| Cost threshold analysis | Prototype | Score and Model use the same stored validation curve and ASSUMED default costs (FN=5, FP=1). |
+| Cost threshold analysis | Prototype | The Score tab uses the stored validation curve and ASSUMED default costs (FN=5, FP=1). |
 | Applicant lookup | Prototype | Local-only held-out lookup; requires `data/processed/test.parquet`, excluded from Docker. |
 | Authentication | Not implemented | No login or access control. |
 | PostgreSQL | Not implemented | Review prototype uses SQLite only. |
@@ -27,8 +27,6 @@ a production credit-decision system.
 
 ![Score tab](docs/screenshots/score-tab.png)
 
-![Model tab threshold analysis](docs/screenshots/model-tab.png)
-
 ## Model results and limitations
 
 The calibrated full-feature model's held-out AUC is **0.7819**; the reported AUC using
@@ -38,10 +36,9 @@ future performance. See
 [the calibration report](docs/calibration_report.md) and
 [the model comparison](docs/model_comparison.md) for the recorded evaluation.
 
-The Score tab and Model tab use the same aggregated calibration-validation curve, with
-default ASSUMED costs FN=5 and FP=1. The Score tab uses the corresponding default threshold;
-the Model tab recalculates it as the cost sliders move. Probabilities are grouped into
-0.001-wide bins, and no applicant identifiers are stored in that curve.
+The Score tab uses the aggregated calibration-validation curve with default ASSUMED costs
+FN=5 and FP=1. It applies the corresponding default threshold. Probabilities are grouped
+into 0.001-wide bins, and no applicant identifiers are stored in that curve.
 Costs are placeholders, not observed lender costs. The portfolio screen shows precomputed aggregate test results
 from `docs/portfolio_summary.json`; it does not read borrower-level test data at runtime.
 
